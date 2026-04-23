@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>YouTube превью — Посольство Иисуса</title>
+<style>
+  /* ============================================
+     ШРИФТ TT Hoves Pro
+     Коммерческий — если есть лицензия, положи .woff2
+     рядом и раскомментируй @font-face ниже.
+     Сейчас фолбэк: Inter (геометрический гротеск).
+  ============================================ */
+
+  /*
+  @font-face {
+    font-family: 'TT Hoves Pro';
+    src: url('./fonts/TTHovesPro-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'TT Hoves Pro';
+    src: url('./fonts/TTHovesPro-DemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+  }
+  */
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600&family=Manrope:wght@500&display=swap');
+
+  /* ============================================
+     ПЕРЕМЕННЫЕ ШАБЛОНА
+  ============================================ */
+  :root {
+    --bg-image: url('https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?w=1920&q=80');
+
+    --color-bg: #000000;
+    --color-text: #ffffff;
+    --color-card: rgba(255, 255, 255, 0.08);
+
+    /* Холст 1920×1080 */
+    --canvas-w: 1920px;
+    --canvas-h: 1080px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: #1a1a1a;
+    font-family: 'TT Hoves Pro', 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ============================================
+     CANVAS — превью 1920×1080
+  ============================================ */
+  .canvas {
+    position: relative;
+    width: var(--canvas-w);
+    height: var(--canvas-h);
+    background: var(--color-bg);
+    overflow: hidden;
+  }
+
+  .canvas__bg {
+    position: absolute;
+    inset: 0;
+    background-image: var(--bg-image);
+    background-size: cover;
+    background-position: center;
+    z-index: 0;
+  }
+
+  /* ============================================
+     ШАПКА — в правой зоне холста, НЕ на карточке
+     "Посольство" слева в правой зоне,
+     "Иисуса" у правого края
+     В макете: top 79.5px, left 919.5px → right 80.5px
+  ============================================ */
+  .header {
+    position: absolute;
+    top: 79.5px;
+    left: 919.5px;
+    right: 80.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 3;
+  }
+
+  .header__brand {
+    font-family: 'TT Hoves Pro', 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 42px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+
+  /* ============================================
+     КАРТОЧКА — стеклянный блок слева
+     Внутри только заголовок + имя спикера
+  ============================================ */
+  .card {
+    position: absolute;
+    top: 39.5px;
+    left: 39.5px;
+    width: 800px;
+    height: 1000px;
+    background: var(--color-card);
+    backdrop-filter: blur(50px);
+    -webkit-backdrop-filter: blur(50px);
+    border-radius: 60px;
+    padding: 60px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    z-index: 2;
+  }
+
+  .card__title {
+    font-family: 'TT Hoves Pro', 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 140px;
+    line-height: 0.9;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+    max-width: 680px;
+  }
+
+  .card__speaker {
+    font-family: 'TT Hoves Pro', 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 60px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+    max-width: 338px;
+  }
+
+  /* ============================================
+     ЮР.ТЕКСТ — ПОД карточкой, в самом низу холста
+     В макете: top 1048.5px, ширина 555px
+  ============================================ */
+  .legal {
+    position: absolute;
+    top: 1044px;         /* чуть выше — лучше центруется в нижнем зазоре */
+    left: 99.5px;
+    width: 700px;        /* запас по ширине под фолбэк-шрифт */
+    font-family: 'Manrope', sans-serif;
+    font-weight: 500;
+    font-size: 12px;
+    line-height: 1.25;   /* комфортный межстрочный для двух строк */
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    text-align: justify;
+    color: var(--color-text);
+    opacity: 0.3;
+    z-index: 3;
+  }
+
+  /* ============================================
+     ПРЕВЬЮ В БРАУЗЕРЕ — масштабирование под экран
+     При рендере (Puppeteer и т.д.) — viewport 1920×1080,
+     обёртки .preview-wrap / .preview-scaler можно убрать.
+  ============================================ */
+  .preview-wrap {
+    width: 100vw;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .preview-scaler {
+    width: var(--canvas-w);
+    height: var(--canvas-h);
+    transform: scale(min(calc((100vw - 40px) / 1920), calc((100vh - 40px) / 1080)));
+    transform-origin: center center;
+  }
+</style>
+</head>
+<body>
+
+<div class="preview-wrap">
+  <div class="preview-scaler">
+
+    <div class="canvas">
+      <div class="canvas__bg"></div>
+
+      <!-- Стеклянная карточка: только заголовок + имя -->
+      <div class="card">
+        <h1 class="card__title">Радость — это дар</h1>
+        <div class="card__speaker">Вадим Шаров</div>
+      </div>
+
+      <!-- Шапка: "Посольство" + "Иисуса" — поверх фото, не на карточке -->
+      <header class="header">
+        <span class="header__brand">Посольство</span>
+        <span class="header__brand">Иисуса</span>
+      </header>
+
+      <!-- Юр.текст: под карточкой, перенос после "евангельской" -->
+      <div class="legal">
+        Местная религиозная организация Церковь христиан веры евангельской<br>
+        (пятидесятников) «Библейский центр «Посольство Иисуса» г. Нижний Новгород
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

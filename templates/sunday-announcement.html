@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Анонс воскресного — Посольство Иисуса</title>
+<style>
+  /* ============================================
+     ШРИФТЫ
+     TT Hoves Pro — коммерческий, фолбэк Inter.
+     Manrope Bold для шапки и юр.текста.
+  ============================================ */
+
+  /*
+  @font-face {
+    font-family: 'TT Hoves Pro';
+    src: url('./fonts/TTHovesPro-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+  }
+  */
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500&family=Manrope:wght@500;700&display=swap');
+
+  /* ============================================
+     ПЕРЕМЕННЫЕ ШАБЛОНА
+  ============================================ */
+  :root {
+    --photo: url('https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?w=1200&q=80');
+
+    --color-bg: #ffffff;
+    --color-ink: #000000;
+    --color-paper: #ffffff;
+    --color-accent: #ff6b1a;   /* оранжевый кружок «Онлайн-трансляция» */
+
+    /* Холст 1200×1500 */
+    --canvas-w: 1200px;
+    --canvas-h: 1500px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: #1a1a1a;
+    font-family: 'TT Hoves Pro', 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ============================================
+     CANVAS
+  ============================================ */
+  .canvas {
+    position: relative;
+    width: var(--canvas-w);
+    height: var(--canvas-h);
+    background: var(--color-bg);
+    overflow: hidden;
+  }
+
+  /* ============================================
+     ФОТО — на всю ширину холста, обрезано белыми
+     полосами сверху и снизу + лестничный край сверху.
+     
+     Геометрия в макете (1200×1500):
+     Union = объединение трёх прямоугольников →
+     лестница из 3 ступеней по 75px:
+       Ступень 1: x 0..1200,    y 74..149
+       Ступень 2: x 300..1200,  y 133..208
+       Ступень 3: x 900..1200,  y 207..282
+     
+     Сверху всё накрывается белой шапкой 0..75px,
+     поэтому фото видно начиная с y=75 на левой части
+     и от y=282 на правой.
+     
+     Перевод в проценты от 1500px высоты:
+        75px =  5%
+       149px =  9.93%
+       208px = 13.87%
+       282px = 18.8%
+      1425px = 95%   (низ перед нижней белой полосой)
+     
+     Координаты по X:
+        300px = 25%
+        900px = 75%
+  ============================================ */
+  .photo {
+    position: absolute;
+    inset: 0;
+    background-image: var(--photo);
+    background-size: cover;
+    background-position: center top;
+    /* Лестница: верхний край фото идёт ступенями
+       слева-наверху → вправо-вниз */
+    clip-path: polygon(
+      /* левая верхняя точка — на уровне 1-й ступени (y=149 = 9.93%) */
+      0%   9.93%,
+      /* идём вправо до 25% (x=300) — конец 1-й ступени */
+      25%  9.93%,
+      /* спуск на 2-ю ступень (y=208 = 13.87%) */
+      25%  13.87%,
+      /* идём вправо до 75% (x=900) — конец 2-й ступени */
+      75%  13.87%,
+      /* спуск на 3-ю ступень (y=282 = 18.8%) */
+      75%  18.8%,
+      /* идём до правого края */
+      100% 18.8%,
+      /* вниз до низа фото (95% = y=1425, перед нижней белой полосой) */
+      100% 95%,
+      0%   95%
+    );
+    z-index: 1;
+  }
+
+  /* ============================================
+     ШАПКА — три слова на белой полосе сверху
+     В макете они НЕ распределены space-between:
+       «Церковь»    — прижата к левому краю (left 40px)
+       «Посольство» — по центру холста
+       «Иисуса»     — прижата к правому краю (right 40px)
+     Top у всех 40px от верха холста.
+  ============================================ */
+  .header__word {
+    position: absolute;
+    top: 40px;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+    font-size: 30px;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--color-ink);
+    white-space: nowrap;
+    z-index: 3;
+  }
+
+  .header__word--left   { left: 40px; }
+  .header__word--center { left: 50%; transform: translateX(-50%); }
+  .header__word--right  { right: 40px; }
+
+  /* ============================================
+     ИНФО-ПЛАШКИ — три ряда снизу
+     Зазор 5px между рядами, padding 30px/40px
+  ============================================ */
+  .info {
+    position: absolute;
+    left: 40px;
+    right: 40px;
+    bottom: 165px;          /* над юр.текстом и его отступом */
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    z-index: 3;
+  }
+
+  .info__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 30px 40px;
+    height: 97px;
+    font-family: 'TT Hoves Pro', 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 40px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  .info__row--light {
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+
+  .info__row--dark {
+    background: var(--color-ink);
+    color: var(--color-paper);
+  }
+
+  /* Третий ряд: 12:00 | • Онлайн-трансляция | адрес — три колонки */
+  .info__online {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .info__dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    flex-shrink: 0;
+  }
+
+  /* ============================================
+     ЮР.ТЕКСТ — снизу холста, по центру
+  ============================================ */
+  .legal {
+    position: absolute;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 720px;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 500;
+    font-size: 12px;
+    line-height: 1.3;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    text-align: center;
+    color: var(--color-ink);
+    opacity: 0.3;
+    z-index: 3;
+  }
+
+  /* ============================================
+     ПРЕВЬЮ В БРАУЗЕРЕ
+  ============================================ */
+  .preview-wrap {
+    width: 100vw;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .preview-scaler {
+    width: var(--canvas-w);
+    height: var(--canvas-h);
+    transform: scale(min(calc((100vw - 40px) / 1200), calc((100vh - 40px) / 1500)));
+    transform-origin: center center;
+  }
+</style>
+</head>
+<body>
+
+<div class="preview-wrap">
+  <div class="preview-scaler">
+
+    <div class="canvas">
+
+      <!-- Фото с фигурным вырезом сверху -->
+      <div class="photo"></div>
+
+      <!-- Шапка: три слова, каждое на своей точке -->
+      <span class="header__word header__word--left">Церковь</span>
+      <span class="header__word header__word--center">Посольство</span>
+      <span class="header__word header__word--right">Иисуса</span>
+
+      <!-- Инфо-плашки -->
+      <div class="info">
+        <div class="info__row info__row--light">
+          <span>Проповедует</span>
+          <span>Вадим Шаров</span>
+        </div>
+        <div class="info__row info__row--dark">
+          <span>09:30</span>
+          <span>50-летия Победы, 18</span>
+        </div>
+        <div class="info__row info__row--dark">
+          <span>12:00</span>
+          <span class="info__online">
+            <span class="info__dot"></span>
+            <span>Онлайн-трансляция</span>
+          </span>
+          <span>50-летия Победы, 18</span>
+        </div>
+      </div>
+
+      <!-- Юр.текст -->
+      <div class="legal">
+        Местная религиозная организация Церковь христиан веры евангельской (пятидесятников) «Библейский центр „Посольство Иисуса"» г. Нижний Новгород
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

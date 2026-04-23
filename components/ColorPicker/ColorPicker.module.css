@@ -1,0 +1,83 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.autoBadge {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--success);
+  background: rgba(52, 199, 89, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.resetBtn {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  transition: color 0.2s ease;
+}
+
+.resetBtn:hover {
+  color: var(--text-secondary);
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.swatch:hover {
+  border-color: var(--text-tertiary);
+}
+
+.nativeInput {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hexInput {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--bg-tertiary);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  font-size: var(--text-sm);
+  font-family: monospace;
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.hexInput:focus {
+  border-color: var(--border-focus);
+  background: var(--bg);
+}

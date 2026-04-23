@@ -1,0 +1,66 @@
+.wrapper {
+  position: relative;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.trigger:hover {
+  background: var(--bg-tertiary);
+}
+
+.label {
+  font-weight: 600;
+}
+
+.dims {
+  color: var(--text-secondary);
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  z-index: 100;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  transition: background 0.15s ease;
+}
+
+.option:hover {
+  background: var(--bg-tertiary);
+}
+
+.option.active {
+  font-weight: 600;
+}
+
+.optionDims {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}

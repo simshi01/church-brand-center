@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ЭКРАН — Семинар — История Церкви</title>
+<style>
+  /*
+    ═══════════════════════════════════════════════════
+    Jem Church — Шаблон экрана
+    Размер: 2970 × 1080 px (из Figma)
+    ═══════════════════════════════════════════════════
+
+    ШРИФТЫ:
+    TT Hoves Pro Expanded (DemiBold) — заголовок
+    TT Hoves Pro (Medium) — подзаголовок
+
+    Вариант 1 — Шрифт установлен на компьютере:
+    Всё заработает автоматически через local().
+
+    Вариант 2 — Подключить файлы шрифтов:
+    Раскомментируйте строки url() ниже
+    и укажите путь к .woff2 / .ttf файлам.
+  */
+
+  @font-face {
+    font-family: 'TT Hoves Pro Expanded';
+    font-weight: 600;
+    font-style: normal;
+    src: local('TT Hoves Pro Expanded DemiBold'),
+         local('TTHovesProExpanded-DemiBold');
+         /* url('./fonts/TTHovesProExpanded-DemiBold.woff2') format('woff2'); */
+  }
+
+  @font-face {
+    font-family: 'TT Hoves Pro';
+    font-weight: 500;
+    font-style: normal;
+    src: local('TT Hoves Pro Medium'),
+         local('TTHovesPro-Medium');
+         /* url('./fonts/TTHovesPro-Medium.woff2') format('woff2'); */
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background: #0a0a0a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+
+  /* ── Canvas 2970×1080 ── */
+  .screen {
+    position: relative;
+    width: 2970px;
+    height: 1080px;
+    overflow: hidden;
+    background: #151515;
+  }
+
+  /* ── Background image ── */
+  .screen__bg {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .screen__bg img {
+    position: absolute;
+    top: -46.39%;
+    left: 0;
+    width: 100%;
+    height: 192.78%;
+    object-fit: cover;
+  }
+
+  /* ── Center card ── */
+  .screen__card {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(calc(-50% + 0.5px), -50%);
+    width: 1169px;
+    height: 900px;
+    background: #e6d4bb;
+  }
+
+  /* ── Title ── */
+  .screen__title {
+    position: absolute;
+    top: calc(50% - 370px);
+    left: calc(50% - 504px);
+    width: 1009px;
+
+    font-family: 'TT Hoves Pro Expanded', 'Arial Black', sans-serif;
+    font-weight: 600;
+    font-size: 200px;
+    line-height: 0.8;
+    letter-spacing: -4px;
+    color: #483419;
+  }
+
+  /* ── Subtitle ── */
+  .screen__subtitle {
+    position: absolute;
+    top: calc(50% + 328px);
+    left: calc(50% - 504px);
+
+    font-family: 'TT Hoves Pro', 'Arial', sans-serif;
+    font-weight: 500;
+    font-size: 60px;
+    line-height: 0.9;
+    color: #483419;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<div class="screen">
+
+  <!-- Фоновое изображение -->
+  <div class="screen__bg">
+    <img src="bg.jpg" alt="">
+  </div>
+
+  <!-- Бежевая карточка -->
+  <div class="screen__card"></div>
+
+  <!-- Заголовок -->
+  <p class="screen__title">История церкви</p>
+
+  <!-- Подзаголовок -->
+  <p class="screen__subtitle">Семинар</p>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Подкаст превью — Посольство Иисуса</title>
+<style>
+  /* ============================================
+     ШРИФТ TT Hoves Pro
+     Коммерческий — если есть лицензия, положи .woff2
+     рядом и раскомментируй @font-face ниже.
+     Сейчас фолбэк: Inter (геометрический гротеск).
+  ============================================ */
+
+  /*
+  @font-face {
+    font-family: 'TT Hoves Pro';
+    src: url('./fonts/TTHovesPro-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'TT Hoves Pro';
+    src: url('./fonts/TTHovesPro-DemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+  }
+  */
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600&display=swap');
+
+  /* ============================================
+     ПЕРЕМЕННЫЕ ШАБЛОНА
+     --speaker-photo — портрет спикера (тот же, что в аватаре)
+     используется И для фона (заблюренный), И для аватара.
+  ============================================ */
+  :root {
+    --speaker-photo: url('https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?w=1600&q=80');
+
+    --color-text: #ffffff;
+    --color-bg-fallback: #2a1818;  /* подложка на случай, если фото не загрузилось */
+
+    /* Холст 1400×1400 (квадрат для подкаста) */
+    --canvas-size: 1400px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: #1a1a1a;
+    font-family: 'TT Hoves Pro', 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ============================================
+     CANVAS — квадрат 1400×1400
+  ============================================ */
+  .canvas {
+    position: relative;
+    width: var(--canvas-size);
+    height: var(--canvas-size);
+    background: var(--color-bg-fallback);
+    overflow: hidden;
+  }
+
+  /* ============================================
+     ФОН — заблюренная фотка спикера
+     Увеличена в 2.5 раза, чтобы за пределы ушли
+     детали и осталась только цветовая палитра.
+     Поверх — затемнение для контраста с белым текстом.
+  ============================================ */
+  .canvas__bg {
+    position: absolute;
+    inset: -50%;             /* выходит за границы холста */
+    width: 200%;
+    height: 200%;
+    background-image: var(--speaker-photo);
+    background-size: cover;
+    background-position: center;
+    filter: blur(120px) saturate(1.2);
+    transform: scale(1.5);   /* дополнительное увеличение для размывания деталей */
+    z-index: 0;
+  }
+
+  /* Затемняющий слой — добавляет глубины и сглаживает любые яркие пятна */
+  .canvas__overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.25);
+    z-index: 1;
+  }
+
+  /* ============================================
+     ОСНОВНОЙ АВТОЛЕЙАУТ
+     Заголовок сверху, спикер по центру-снизу, футер внизу.
+     Padding 80px по бокам как в макете.
+  ============================================ */
+  .canvas__layout {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    padding: 80px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ============================================
+     ЗАГОЛОВОК
+     В макете 200px / DemiBold / line-height 0.9
+  ============================================ */
+  .title {
+    font-family: 'TT Hoves Pro', 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 200px;
+    line-height: 0.9;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+    max-width: 1246px;
+  }
+
+  /* Распорка — толкает блок спикера вниз */
+  .spacer { flex: 1; }
+
+  /* ============================================
+     БЛОК СПИКЕРА — аватар + имя
+     В макете: top ~912px, аватар 207px, имя 78px Medium
+  ============================================ */
+  .speaker {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+    margin-bottom: 80px;
+  }
+
+  .speaker__avatar {
+    width: 208px;
+    height: 208px;
+    border-radius: 50%;
+    background-image: var(--speaker-photo);
+    background-size: cover;
+    background-position: center;
+    flex-shrink: 0;
+  }
+
+  .speaker__name {
+    font-family: 'TT Hoves Pro', 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 78px;
+    line-height: 0.9;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+    /* перенос на две строки управляется <br> в HTML */
+  }
+
+  /* ============================================
+     ФУТЕР — "Посольство ——— Иисуса"
+     В макете: 50px Medium, линия между текстами
+  ============================================ */
+  .footer {
+    display: flex;
+    align-items: center;
+    gap: 52px;
+  }
+
+  .footer__brand {
+    font-family: 'TT Hoves Pro', 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 50px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .footer__line {
+    flex: 1;
+    height: 2px;
+    background: var(--color-text);
+    opacity: 0.9;
+  }
+
+  /* ============================================
+     ПРЕВЬЮ В БРАУЗЕРЕ — масштабирование под экран
+     При рендере (Puppeteer и т.д.) — viewport 1400×1400,
+     обёртки .preview-wrap / .preview-scaler можно убрать.
+  ============================================ */
+  .preview-wrap {
+    width: 100vw;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .preview-scaler {
+    width: var(--canvas-size);
+    height: var(--canvas-size);
+    transform: scale(min(calc((100vw - 40px) / 1400), calc((100vh - 40px) / 1400)));
+    transform-origin: center center;
+  }
+</style>
+</head>
+<body>
+
+<div class="preview-wrap">
+  <div class="preview-scaler">
+
+    <div class="canvas">
+      <div class="canvas__bg"></div>
+      <div class="canvas__overlay"></div>
+
+      <div class="canvas__layout">
+
+        <h1 class="title">Радость — это дар</h1>
+
+        <div class="spacer"></div>
+
+        <div class="speaker">
+          <div class="speaker__avatar"></div>
+          <div class="speaker__name">Вадим<br>Шаров</div>
+        </div>
+
+        <footer class="footer">
+          <span class="footer__brand">Посольство</span>
+          <div class="footer__line"></div>
+          <span class="footer__brand">Иисуса</span>
+        </footer>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

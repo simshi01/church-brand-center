@@ -1,0 +1,123 @@
+/* ── Fonts ── */
+@font-face {
+  font-family: 'TT Hoves Pro';
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/TT_Hoves_Pro_Medium.otf') format('opentype');
+}
+
+@font-face {
+  font-family: 'TT Hoves Pro';
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/TT_Hoves_Pro_DemiBold.otf') format('opentype');
+}
+
+@font-face {
+  font-family: 'TT Hoves Pro Expanded';
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/TT_Hoves_Pro_Expanded_DemiBold.otf') format('opentype');
+}
+
+/* ── Reset ── */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ── Design Tokens ── */
+:root {
+  /* Backgrounds */
+  --bg: #FFFFFF;
+  --bg-secondary: #F5F5F7;
+  --bg-tertiary: #EBEBED;
+
+  /* Surfaces */
+  --surface: #FFFFFF;
+  --surface-hover: #F9F9FB;
+
+  /* Borders */
+  --border: #E2E2E7;
+  --border-light: #F0F0F2;
+  --border-focus: #007AFF;
+
+  /* Text */
+  --text-primary: #1D1D1F;
+  --text-secondary: #6E6E73;
+  --text-tertiary: #AEAEB2;
+
+  /* Accent */
+  --accent: #1D1D1F;
+  --accent-hover: #424245;
+  --accent-bg: #F5F5F7;
+
+  /* System */
+  --success: #34C759;
+  --error: #FF3B30;
+  --warning: #FF9500;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.08);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.04), 0 0 1px rgba(0, 0, 0, 0.06);
+
+  /* Typography scale */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 36px;
+
+  /* Font families */
+  --font-primary: 'TT Hoves Pro', sans-serif;
+  --font-expanded: 'TT Hoves Pro Expanded', sans-serif;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-primary);
+  font-weight: 500;
+  font-size: var(--text-base);
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  background: var(--bg);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
