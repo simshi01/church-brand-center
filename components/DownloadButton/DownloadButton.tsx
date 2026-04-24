@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Download } from 'lucide-react';
 import { toPng } from 'html-to-image';
+import html2canvas from 'html2canvas';
 import { useToast } from '@/lib/toastContext';
 import { debugLog } from '@/lib/debugLog';
 import styles from './DownloadButton.module.css';
@@ -234,47 +235,96 @@ async function captureScreenToPng(
     await prepareImagesForCapture(cloneScreen);
 
     await doubleRaf();
-    debugLog.info('capture', 'double rAF done; calling toPng');
 
-    const runOnce = async (attempt: number): Promise<Blob | null> => {
-      const tpng = performance.now();
-      let dataUrl: string | null = null;
-      try {
-        dataUrl = await toPng(cloneScreen, {
-          width,
-          height,
-          pixelRatio: 1,
-          skipAutoScale: true,
-          skipFonts: true,
-          includeQueryParams: true,
-          imagePlaceholder: TRANSPARENT_PIXEL,
-        });
-      } catch (err) {
-        debugLog.error('capture', `attempt ${attempt}: toPng threw: ${String(err)}`);
-        return null;
-      }
-      debugLog.info('capture', `attempt ${attempt}: toPng done in ${Math.round(performance.now() - tpng)}ms, dataUrl len=${dataUrl ? dataUrl.length : 0}`);
-      if (!dataUrl) return null;
-      const resp = await fetch(dataUrl);
-      const blob = await resp.blob();
-      debugLog.info('capture', `attempt ${attempt}: blob ${blob.size}B type=${blob.type}`);
-      return blob;
-    };
+    // Diagnostic: dump cloned DOM state so we can tell whether the img is
+    // actually present right before the renderer runs.
+    const finalImgs = Array.from(cloneScreen.querySelectorAll('img'));
+    debugLog.info('capture', `pre-render: cloneScreen.outerHTML len=${cloneScreen.outerHTML.length}; imgs=${finalImgs.length}`);
+    finalImgs.forEach((im, i) => {
+      debugLog.info('capture', `pre-render img${i}: complete=${im.complete} natural=${im.naturalWidth}x${im.naturalHeight} attrW=${im.getAttribute('width')} attrH=${im.getAttribute('height')} srcLen=${im.getAttribute('src')?.length ?? 0}`);
+    });
 
-    let blob = await runOnce(1);
-    if (blob && blob.size < MIN_EXPECTED_PNG_BYTES) {
-      debugLog.warn('capture', `blob ${blob.size} < threshold ${MIN_EXPECTED_PNG_BYTES}; retrying`);
-      await new Promise((r) => setTimeout(r, 300));
-      const second = await runOnce(2);
-      if (second && second.size > blob.size) {
-        debugLog.info('capture', `retry improved: ${blob.size} -> ${second.size}`);
-        blob = second;
+    // Primary: html2canvas (direct Canvas 2D rendering; does NOT use SVG
+    // foreignObject so it's not affected by the iOS WebKit bug that silently
+    // drops imgs inside foreignObject).
+    let blob = await renderWithHtml2Canvas(cloneScreen, width, height);
+
+    // Fallback: html-to-image (foreignObject-based). Kept because html2canvas
+    // has its own edge cases.
+    if (!blob || blob.size < MIN_EXPECTED_PNG_BYTES) {
+      debugLog.warn('capture', 'html2canvas output too small or missing — falling back to html-to-image');
+      const fallback = await renderWithHtmlToImage(cloneScreen, width, height);
+      if (fallback && (!blob || fallback.size > blob.size)) {
+        debugLog.info('capture', `fallback improved: ${blob?.size ?? 0} -> ${fallback.size}`);
+        blob = fallback;
       }
     }
     return blob;
   } finally {
     document.body.removeChild(wrapper);
     debugLog.info('capture', 'off-screen clone removed');
+  }
+}
+
+async function renderWithHtml2Canvas(
+  screenEl: HTMLElement,
+  width: number,
+  height: number
+): Promise<Blob | null> {
+  const t0 = performance.now();
+  try {
+    const canvas = await html2canvas(screenEl, {
+      width,
+      height,
+      // Keep scale at 1 — we already composited at target resolution.
+      scale: 1,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false,
+      // The element is off-screen in the fixed wrapper; tell html2canvas
+      // to render at (0,0) within the element rather than viewport-relative.
+      x: 0,
+      y: 0,
+      windowWidth: width,
+      windowHeight: height,
+    });
+    debugLog.info('h2c', `done in ${Math.round(performance.now() - t0)}ms, canvas ${canvas.width}x${canvas.height}`);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), 'image/png');
+    });
+    debugLog.info('h2c', `toBlob ${blob ? blob.size : 0}B`);
+    return blob;
+  } catch (err) {
+    debugLog.error('h2c', `threw: ${String(err)}`);
+    return null;
+  }
+}
+
+async function renderWithHtmlToImage(
+  screenEl: HTMLElement,
+  width: number,
+  height: number
+): Promise<Blob | null> {
+  const t0 = performance.now();
+  try {
+    const dataUrl = await toPng(screenEl, {
+      width,
+      height,
+      pixelRatio: 1,
+      skipAutoScale: true,
+      skipFonts: true,
+      includeQueryParams: true,
+      imagePlaceholder: TRANSPARENT_PIXEL,
+    });
+    debugLog.info('h2i', `toPng done in ${Math.round(performance.now() - t0)}ms, dataUrl len=${dataUrl ? dataUrl.length : 0}`);
+    if (!dataUrl) return null;
+    const resp = await fetch(dataUrl);
+    const blob = await resp.blob();
+    debugLog.info('h2i', `blob ${blob.size}B type=${blob.type}`);
+    return blob;
+  } catch (err) {
+    debugLog.error('h2i', `threw: ${String(err)}`);
+    return null;
   }
 }
 
