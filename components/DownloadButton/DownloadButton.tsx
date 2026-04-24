@@ -181,48 +181,101 @@ async function captureScreenToPng(
   width: number,
   height: number
 ): Promise<Blob | null> {
-  const runOnce = async (attempt: number): Promise<Blob | null> => {
-    debugLog.info('capture', `attempt ${attempt}: prepare start`);
-    await prepareImagesForCapture(screenEl);
-    debugLog.info('capture', `attempt ${attempt}: prepare done; double rAF`);
-    await doubleRaf();
-    const tpng = performance.now();
-    let dataUrl: string | null = null;
-    try {
-      dataUrl = await toPng(screenEl, {
-        width,
-        height,
-        pixelRatio: 1,
-        skipAutoScale: true,
-        skipFonts: true,
-        includeQueryParams: true,
-        imagePlaceholder: TRANSPARENT_PIXEL,
-      });
-    } catch (err) {
-      debugLog.error('capture', `toPng threw: ${String(err)}`);
+  const sourceParent = screenEl.parentElement;
+  if (!sourceParent) {
+    debugLog.error('capture', 'screen has no parent — cannot clone');
+    return null;
+  }
+
+  // Off-screen clone: we'll mutate it freely without breaking the live
+  // preview. The cloned <style> tag carries the template's CSS rules so
+  // the cloned .screen has its 1200×1500 layout context.
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:fixed;left:-99999px;top:0;pointer-events:none;';
+  // Disable transitions/animations on every cloned element so we never
+  // capture a half-finished filter swap.
+  const noAnim = document.createElement('style');
+  noAnim.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; animation-duration: 0s !important; }';
+  wrapper.appendChild(noAnim);
+
+  const treeClone = sourceParent.cloneNode(true) as HTMLElement;
+  wrapper.appendChild(treeClone);
+  document.body.appendChild(wrapper);
+  debugLog.info('capture', 'off-screen clone mounted');
+
+  try {
+    const cloneScreen = treeClone.querySelector('.screen') as HTMLElement | null;
+    if (!cloneScreen) {
+      debugLog.error('capture', '.screen not found in clone');
       return null;
     }
-    debugLog.info('capture', `attempt ${attempt}: toPng done in ${Math.round(performance.now() - tpng)}ms, dataUrl len=${dataUrl ? dataUrl.length : 0}`);
-    if (!dataUrl) return null;
-    const resp = await fetch(dataUrl);
-    const blob = await resp.blob();
-    debugLog.info('capture', `attempt ${attempt}: blob ${blob.size}B type=${blob.type}`);
-    return blob;
-  };
 
-  let blob = await runOnce(1);
-  if (blob && blob.size < MIN_EXPECTED_PNG_BYTES) {
-    debugLog.warn('capture', `blob ${blob.size} < threshold ${MIN_EXPECTED_PNG_BYTES}; retrying`);
-    await new Promise((r) => setTimeout(r, 300));
-    const second = await runOnce(2);
-    if (second && second.size > blob.size) {
-      debugLog.info('capture', `retry improved: ${blob.size} -> ${second.size}`);
-      blob = second;
-    } else {
-      debugLog.warn('capture', `retry did not improve (${second ? second.size : 'null'})`);
+    // Wait for cloned imgs to decode before we read their natural sizes.
+    const cloneImgs = Array.from(cloneScreen.querySelectorAll('img'));
+    debugLog.info('capture', `clone has ${cloneImgs.length} imgs; waiting decode`);
+    await Promise.all(
+      cloneImgs.map((im) =>
+        im.decode().catch(() => {
+          /* ignore — bake step will retry via fresh Image() */
+        })
+      )
+    );
+
+    // Step 1: collapse every element with clip-path:polygon and stacked imgs
+    // into a single flat <img> at the element's box size. iOS Safari's
+    // foreignObject can't render the original layered structure (clip-path
+    // + position:absolute + multiple data-URI imgs). After this step the
+    // SVG sees a single plain block element with one <img> baked at fixed
+    // pixel size — exactly what foreignObject reliably rasterises.
+    const composited = await compositeClippedContainers(cloneScreen);
+    debugLog.info('capture', `composited ${composited} clipped container(s)`);
+
+    // Step 2: bake any remaining imgs (e.g., logos) for size.
+    await prepareImagesForCapture(cloneScreen);
+
+    await doubleRaf();
+    debugLog.info('capture', 'double rAF done; calling toPng');
+
+    const runOnce = async (attempt: number): Promise<Blob | null> => {
+      const tpng = performance.now();
+      let dataUrl: string | null = null;
+      try {
+        dataUrl = await toPng(cloneScreen, {
+          width,
+          height,
+          pixelRatio: 1,
+          skipAutoScale: true,
+          skipFonts: true,
+          includeQueryParams: true,
+          imagePlaceholder: TRANSPARENT_PIXEL,
+        });
+      } catch (err) {
+        debugLog.error('capture', `attempt ${attempt}: toPng threw: ${String(err)}`);
+        return null;
+      }
+      debugLog.info('capture', `attempt ${attempt}: toPng done in ${Math.round(performance.now() - tpng)}ms, dataUrl len=${dataUrl ? dataUrl.length : 0}`);
+      if (!dataUrl) return null;
+      const resp = await fetch(dataUrl);
+      const blob = await resp.blob();
+      debugLog.info('capture', `attempt ${attempt}: blob ${blob.size}B type=${blob.type}`);
+      return blob;
+    };
+
+    let blob = await runOnce(1);
+    if (blob && blob.size < MIN_EXPECTED_PNG_BYTES) {
+      debugLog.warn('capture', `blob ${blob.size} < threshold ${MIN_EXPECTED_PNG_BYTES}; retrying`);
+      await new Promise((r) => setTimeout(r, 300));
+      const second = await runOnce(2);
+      if (second && second.size > blob.size) {
+        debugLog.info('capture', `retry improved: ${blob.size} -> ${second.size}`);
+        blob = second;
+      }
     }
+    return blob;
+  } finally {
+    document.body.removeChild(wrapper);
+    debugLog.info('capture', 'off-screen clone removed');
   }
-  return blob;
 }
 
 function doubleRaf(): Promise<void> {
@@ -248,6 +301,180 @@ async function decodeFreshImage(src: string): Promise<HTMLImageElement | null> {
   }
   if (!img.naturalWidth || !img.naturalHeight) return null;
   return img;
+}
+
+/**
+ * Parse a CSS `clip-path: polygon(...)` value into a Path2D scaled to the
+ * given box size. Returns null if the value isn't a polygon or the format
+ * isn't recognised.
+ */
+function parseClipPathPolygon(css: string, w: number, h: number): Path2D | null {
+  if (!css || !css.startsWith('polygon')) return null;
+  const match = css.match(/polygon\([^)]*\)/);
+  if (!match) return null;
+  const inner = match[0].slice('polygon('.length, -1);
+  const points = inner.split(',').map((p) => {
+    const tokens = p.trim().split(/\s+/);
+    const px = parsePercent(tokens[0] || '0');
+    const py = parsePercent(tokens[1] || '0');
+    return { x: px * w, y: py * h };
+  });
+  if (points.length < 3) return null;
+  const path = new Path2D();
+  path.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) path.lineTo(points[i].x, points[i].y);
+  path.closePath();
+  return path;
+}
+
+/**
+ * Find every element whose computed clip-path is a polygon and that has
+ * <img> descendants — those are the layered photo wrappers our templates
+ * use. Walking only on demand.
+ */
+function findClippedContainers(root: HTMLElement): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  const walk = (el: Element) => {
+    if (el.tagName === 'IMG' || el.tagName === 'STYLE' || el.tagName === 'SCRIPT') return;
+    const cs = getComputedStyle(el);
+    const cp = cs.clipPath;
+    if (cp && cp !== 'none' && cp.startsWith('polygon') && el.querySelector('img')) {
+      out.push(el as HTMLElement);
+      return; // don't descend; we'll composite the whole subtree
+    }
+    for (const child of Array.from(el.children)) walk(child);
+  };
+  walk(root);
+  return out;
+}
+
+/**
+ * For each clipped container, render its visible imgs (with their CSS
+ * filters and object-fit/-position) plus the clip-path mask into a single
+ * canvas, then replace the container's children with one plain <img> at
+ * fixed pixel dimensions. The container's own clip-path is removed because
+ * the polygon mask is now baked into the bitmap pixels (white outside,
+ * photo inside). This collapses the whole layered structure into the
+ * simplest possible foreignObject input — one block element, one image,
+ * no clip-path, no transitions, no positioning tricks.
+ *
+ * Returns the number of containers it composited.
+ */
+async function compositeClippedContainers(root: HTMLElement): Promise<number> {
+  const containers = findClippedContainers(root);
+  let count = 0;
+  for (let i = 0; i < containers.length; i++) {
+    const ok = await compositeContainer(containers[i], i);
+    if (ok) count++;
+  }
+  return count;
+}
+
+async function compositeContainer(container: HTMLElement, idx: number): Promise<boolean> {
+  const w = container.clientWidth || container.offsetWidth;
+  const h = container.clientHeight || container.offsetHeight;
+  if (!w || !h) {
+    debugLog.warn(`composite${idx}`, `container has zero size ${w}x${h} — skipping`);
+    return false;
+  }
+
+  const cs = getComputedStyle(container);
+  const polygonPath = parseClipPathPolygon(cs.clipPath, w, h);
+  debugLog.info(`composite${idx}`, `target ${w}x${h}, clip=${cs.clipPath}`);
+
+  // Imgs in document (z-index/paint) order. Skip ones display:none / hidden,
+  // so the cutout layer is included only when active.
+  const imgs = Array.from(container.querySelectorAll('img')).filter((im) => {
+    const ics = getComputedStyle(im);
+    return ics.display !== 'none' && ics.visibility !== 'hidden';
+  });
+  debugLog.info(`composite${idx}`, `compositing ${imgs.length} visible img(s)`);
+  if (imgs.length === 0) return false;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    debugLog.error(`composite${idx}`, 'getContext returned null');
+    return false;
+  }
+
+  // Fill outside-of-clip area with white so the JPEG-friendly composite
+  // matches the .screen background.
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+
+  if (polygonPath) {
+    ctx.save();
+    ctx.clip(polygonPath);
+  }
+
+  for (let i = 0; i < imgs.length; i++) {
+    const img = imgs[i];
+    const src = img.getAttribute('src') || '';
+    if (!src.startsWith('data:')) {
+      debugLog.warn(`composite${idx}`, `img${i}: src not data URI — skipping`);
+      continue;
+    }
+
+    const fresh = await decodeFreshImage(src);
+    if (!fresh) {
+      debugLog.warn(`composite${idx}`, `img${i}: decodeFreshImage returned null`);
+      continue;
+    }
+
+    const ics = getComputedStyle(img);
+    const filter = ics.filter;
+    const hasFilter = !!filter && filter !== 'none';
+    if (hasFilter) {
+      debugLog.info(`composite${idx}`, `img${i}: filter=${filter}`);
+      ctx.filter = filter;
+    }
+
+    const fit = ics.objectFit || 'cover';
+    const pos = ics.objectPosition || '50% 50%';
+    if (fit === 'cover' || fit === 'fill') {
+      drawWithCover(ctx, fresh, w, h, pos);
+    } else {
+      ctx.drawImage(fresh, 0, 0, w, h);
+    }
+    ctx.filter = 'none';
+    debugLog.info(`composite${idx}`, `img${i}: drawn (${fresh.naturalWidth}x${fresh.naturalHeight}, fit=${fit}, pos=${pos})`);
+  }
+
+  if (polygonPath) ctx.restore();
+
+  // JPEG ok — every pixel is now opaque (we filled white below the photo).
+  const composite = canvas.toDataURL('image/jpeg', 0.85);
+  debugLog.info(`composite${idx}`, `composite jpeg len=${composite.length}`);
+  if (!composite || composite.length < 1000) {
+    debugLog.warn(`composite${idx}`, 'composite came out tiny — aborting replace');
+    return false;
+  }
+
+  // Replace container content with a single <img>. Clear the container's
+  // clip-path because it's baked into the pixels.
+  while (container.firstChild) container.removeChild(container.firstChild);
+  const flat = document.createElement('img');
+  flat.src = composite;
+  flat.alt = '';
+  flat.width = w;
+  flat.height = h;
+  flat.style.cssText = `display:block;width:${w}px;height:${h}px;object-fit:fill;`;
+  container.appendChild(flat);
+  container.style.clipPath = 'none';
+  // Make sure the container itself has explicit pixel size so foreignObject
+  // doesn't rely on percentage resolution chains.
+  if (!container.style.width) container.style.width = `${w}px`;
+  if (!container.style.height) container.style.height = `${h}px`;
+
+  try {
+    await flat.decode();
+  } catch {
+    /* ignore */
+  }
+  return true;
 }
 
 function canvasHasPixels(ctx: CanvasRenderingContext2D, w: number, h: number): boolean {
