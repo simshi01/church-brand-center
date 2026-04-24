@@ -8,7 +8,9 @@ export async function POST() {
   res.cookies.set(AUTH_COOKIE_NAME, '', {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure:
+      process.env.NODE_ENV === 'production' &&
+      process.env.AUTH_COOKIE_INSECURE !== 'true',
     path: '/',
     maxAge: 0,
   });
