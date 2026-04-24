@@ -222,31 +222,30 @@ async function captureScreenToPng(
       )
     );
 
+    // html2canvas doesn't support CSS filter on imgs reliably, doesn't
+    // handle polygon clip-paths, and its object-fit: cover emulation is
+    // imperfect. Bake the clipped photo layers (bg + cutout + grayscale +
+    // polygon mask + object-fit cover) into a single flat <img> so the
+    // renderer just sees a plain image it can blit to canvas.
+    const composited = await compositeClippedContainers(cloneScreen);
+    debugLog.info('capture', `composited ${composited} clipped container(s)`);
+
     await doubleRaf();
 
-    // Diagnostic: dump cloned DOM state so we can tell whether imgs are
-    // present and decoded right before the renderer runs.
     const preImgs = Array.from(cloneScreen.querySelectorAll('img'));
     debugLog.info('capture', `pre-render: cloneScreen.outerHTML len=${cloneScreen.outerHTML.length}; imgs=${preImgs.length}`);
     preImgs.forEach((im, i) => {
       debugLog.info('capture', `pre-render img${i}: complete=${im.complete} natural=${im.naturalWidth}x${im.naturalHeight} srcLen=${im.getAttribute('src')?.length ?? 0}`);
     });
 
-    // Primary: html2canvas on the *unmutated* clone. html2canvas paints
-    // through Canvas 2D and natively supports the CSS filter and clip-path
-    // we use — feeding it the original layered structure preserves layout
-    // and gives us grayscale bg + colour cutout for free. Our previous
-    // composite/bake mutations were written for html-to-image's foreignObject
-    // path and actually broke both things on iOS Safari (ctx.filter ignored,
-    // layout shifted by explicit container sizing).
+    // Primary: html2canvas (Canvas 2D, no foreignObject). Renders the
+    // already-composited photo layer plus the remaining text/box elements.
     let blob = await renderWithHtml2Canvas(cloneScreen, width, height);
 
-    // Fallback: html-to-image. Only used if html2canvas failed entirely —
-    // its foreignObject path still needs the composite+bake workaround.
+    // Fallback: html-to-image. Its foreignObject path may still need extra
+    // img baking since large data URIs get silently dropped there.
     if (!blob || blob.size < MIN_EXPECTED_PNG_BYTES) {
-      debugLog.warn('capture', 'html2canvas output too small or missing — falling back to html-to-image (with composite+bake)');
-      const composited = await compositeClippedContainers(cloneScreen);
-      debugLog.info('capture', `fallback composited ${composited} clipped container(s)`);
+      debugLog.warn('capture', 'html2canvas output too small or missing — falling back to html-to-image');
       await prepareImagesForCapture(cloneScreen);
       await doubleRaf();
       const fallback = await renderWithHtmlToImage(cloneScreen, width, height);
@@ -472,11 +471,7 @@ async function compositeContainer(container: HTMLElement, idx: number): Promise<
 
     const ics = getComputedStyle(img);
     const filter = ics.filter;
-    const hasFilter = !!filter && filter !== 'none';
-    if (hasFilter) {
-      debugLog.info(`composite${idx}`, `img${i}: filter=${filter}`);
-      ctx.filter = filter;
-    }
+    const hasGrayscale = !!filter && filter.includes('grayscale');
 
     const fit = ics.objectFit || 'cover';
     const pos = ics.objectPosition || '50% 50%';
@@ -485,8 +480,26 @@ async function compositeContainer(container: HTMLElement, idx: number): Promise<
     } else {
       ctx.drawImage(fresh, 0, 0, w, h);
     }
-    ctx.filter = 'none';
     debugLog.info(`composite${idx}`, `img${i}: drawn (${fresh.naturalWidth}x${fresh.naturalHeight}, fit=${fit}, pos=${pos})`);
+
+    // Apply CSS filter manually via pixel manipulation instead of ctx.filter,
+    // which iOS Safari's Canvas 2D silently ignores for drawImage(). Doing
+    // this right after drawing THIS img and before drawing the next one so
+    // only this layer gets grayscaled. Already-white outside-clip pixels
+    // stay white (grayscale of 255,255,255 is still 255,255,255). putImageData
+    // is not affected by the active clip region, but since white in stays
+    // white out there's no visual difference outside the polygon.
+    if (hasGrayscale) {
+      const tgs = performance.now();
+      const imgData = ctx.getImageData(0, 0, w, h);
+      const d = imgData.data;
+      for (let p = 0; p < d.length; p += 4) {
+        const g = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+        d[p] = d[p + 1] = d[p + 2] = g;
+      }
+      ctx.putImageData(imgData, 0, 0);
+      debugLog.info(`composite${idx}`, `img${i}: grayscale baked via pixels in ${Math.round(performance.now() - tgs)}ms`);
+    }
   }
 
   if (polygonPath) ctx.restore();
@@ -499,21 +512,20 @@ async function compositeContainer(container: HTMLElement, idx: number): Promise<
     return false;
   }
 
-  // Replace container content with a single <img>. Clear the container's
-  // clip-path because it's baked into the pixels.
+  // Replace container content with a single <img> using 100% sizing. We
+  // deliberately DON'T pin the container to explicit px — its CSS rules
+  // (position:absolute;inset:0 = 1200×1500) already size it correctly, and
+  // inline px can disturb adjacent absolutely-positioned info rows.
   while (container.firstChild) container.removeChild(container.firstChild);
   const flat = document.createElement('img');
   flat.src = composite;
   flat.alt = '';
-  flat.width = w;
-  flat.height = h;
-  flat.style.cssText = `display:block;width:${w}px;height:${h}px;object-fit:fill;`;
+  flat.style.cssText = 'display:block;width:100%;height:100%;object-fit:fill;';
   container.appendChild(flat);
+  // Clip-path is baked into the pixels; drop it from the container so the
+  // renderer doesn't try to re-apply it (html2canvas doesn't support polygon
+  // clip-paths on HTML elements anyway).
   container.style.clipPath = 'none';
-  // Make sure the container itself has explicit pixel size so foreignObject
-  // doesn't rely on percentage resolution chains.
-  if (!container.style.width) container.style.width = `${w}px`;
-  if (!container.style.height) container.style.height = `${h}px`;
 
   try {
     await flat.decode();
