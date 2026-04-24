@@ -1,0 +1,152 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  padding: 24px;
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+  padding: 40px 36px 32px;
+  animation: appear 0.3s ease-out;
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.logo {
+  font-family: var(--font-expanded);
+  font-weight: 600;
+  font-size: var(--text-3xl);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  letter-spacing: -0.01em;
+}
+
+.form {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.input {
+  height: 44px;
+  padding: 0 14px;
+  background: var(--bg-tertiary);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  font-size: var(--text-base);
+  font-family: inherit;
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.input:focus {
+  border-color: var(--border-focus);
+  background: var(--bg);
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error {
+  margin-top: 8px;
+  min-height: 18px;
+  font-size: var(--text-sm);
+  color: var(--error);
+  line-height: 1.4;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.error[data-visible='true'] {
+  opacity: 1;
+}
+
+.submit {
+  margin-top: 16px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-size: var(--text-base);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.submit:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-0.5px);
+  box-shadow: var(--shadow-sm);
+}
+
+.submit:active:not(:disabled) {
+  transform: scale(0.98);
+  transition: transform 0.1s ease;
+}
+
+.submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin-top: 28px;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 32px 24px 28px;
+    border-radius: 14px;
+  }
+
+  .logo {
+    font-size: var(--text-2xl);
+  }
+}

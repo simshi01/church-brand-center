@@ -23,7 +23,11 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
+.env
 .env*.local
+
+# access codes (edit on server, not in repo)
+/data/access-codes.json
 
 # vercel
 .vercel
