@@ -4,10 +4,15 @@ import { useRef, useState, useEffect, useCallback, useLayoutEffect, forwardRef, 
 import { Loader2 } from 'lucide-react';
 import { VariantConfig } from '@/lib/types';
 import { fitTitleInCard } from '@/lib/fitTitle';
+import { applyBindings, Binding, collectBindings } from '@/lib/templateBinder';
 import styles from './EditorPreview.module.css';
 
 interface EditorPreviewProps {
-  html: string;
+  /** Raw template HTML with {{key}} placeholders intact. Mounted once per
+   *  variant; subsequent value changes patch the DOM in place. */
+  templateHtml: string;
+  /** All values fed to bindings (fieldValues + titleSize + cutoutActive etc.) */
+  values: Record<string, string>;
   variant: VariantConfig;
   maxFontSize: number;
   minFontSize: number;
@@ -20,7 +25,8 @@ export interface EditorPreviewHandle {
 }
 
 const EditorPreview = forwardRef<EditorPreviewHandle, EditorPreviewProps>(({
-  html,
+  templateHtml,
+  values,
   variant,
   maxFontSize,
   minFontSize,
@@ -29,9 +35,9 @@ const EditorPreview = forwardRef<EditorPreviewHandle, EditorPreviewProps>(({
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const bindingsRef = useRef<Binding[]>([]);
   const [scale, setScale] = useState(0.3);
 
-  // Expose getScreenElement to parent (for export capture)
   useImperativeHandle(ref, () => ({
     getScreenElement: () => {
       if (!contentRef.current) return null;
@@ -39,10 +45,9 @@ const EditorPreview = forwardRef<EditorPreviewHandle, EditorPreviewProps>(({
     },
   }));
 
-  // Scale calculation — reads padding from computed style so it works across
-  // all breakpoints and dynamic paddings (e.g., --reserved-bottom driven by
-  // the mobile bottom sheet). ResizeObserver covers container size changes
-  // that don't trigger window 'resize' — sheet snap, keyboard, orientation.
+  // Scale — reads padding via computed style; ResizeObserver picks up layout
+  // changes (bottom-sheet snap on mobile, keyboard, rotation) that `window
+  // resize` would miss.
   const updateScale = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -73,21 +78,24 @@ const EditorPreview = forwardRef<EditorPreviewHandle, EditorPreviewProps>(({
     };
   }, [updateScale]);
 
-  // Render HTML + fit title — all synchronous BEFORE paint (no flicker)
+  // Structural mount: only when template string itself changes (e.g. variant
+  // switch). Keeps imgs alive across field-value changes, which is critical on
+  // iOS Safari — rapid innerHTML resets drop image decodes and the preview
+  // flashes white.
   useLayoutEffect(() => {
     if (!contentRef.current) return;
-    contentRef.current.innerHTML = html;
+    contentRef.current.innerHTML = templateHtml;
+    bindingsRef.current = collectBindings(contentRef.current);
+    applyBindings(bindingsRef.current, values);
     const size = fitTitleInCard(contentRef.current, maxFontSize, minFontSize);
     onTitleSizeComputed?.(size);
 
-    // Font-race safety net: .screen__title uses TT Hoves Pro Expanded, which
-    // exists only inside the injected preview HTML. If it isn't loaded yet,
-    // the sync fit above measures with sans-serif fallback (narrower glyphs)
-    // and returns maxFontSize, causing the title to overflow once the real
-    // font swaps in. Re-fit on the same DOM after the face actually loads.
+    // Font-race guard for Smart Title Fit: the preview template declares its
+    // own @font-face for TT Hoves Pro Expanded; if it hasn't loaded yet, the
+    // first measurement uses a sans-serif fallback (narrower glyphs) and
+    // returns maxFontSize, so the title overflows once the real font swaps.
     if (typeof document === 'undefined' || !('fonts' in document)) return;
     if (document.fonts.check("600 16px 'TT Hoves Pro Expanded'")) return;
-
     let cancelled = false;
     document.fonts.load("600 200px 'TT Hoves Pro Expanded'").then(() => {
       if (cancelled || !contentRef.current) return;
@@ -97,7 +105,19 @@ const EditorPreview = forwardRef<EditorPreviewHandle, EditorPreviewProps>(({
     return () => {
       cancelled = true;
     };
-  }, [html, maxFontSize, minFontSize, onTitleSizeComputed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateHtml, maxFontSize, minFontSize]);
+
+  // Value update: patch bound attributes / text nodes without touching
+  // innerHTML. No img elements are destroyed, so no re-decode on iOS.
+  useLayoutEffect(() => {
+    if (!contentRef.current) return;
+    if (!bindingsRef.current.length) return;
+    applyBindings(bindingsRef.current, values);
+    // Re-fit in case the title text changed.
+    const size = fitTitleInCard(contentRef.current, maxFontSize, minFontSize);
+    onTitleSizeComputed?.(size);
+  }, [values, maxFontSize, minFontSize, onTitleSizeComputed]);
 
   return (
     <div className={styles.container} ref={containerRef}>

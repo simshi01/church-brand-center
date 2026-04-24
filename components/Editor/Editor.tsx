@@ -4,7 +4,6 @@ import { useState, useMemo, useCallback, useRef, CSSProperties } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { TemplateConfig } from '@/lib/types';
-import { renderTemplate } from '@/lib/renderTemplate';
 import { getTemplateHtml } from '@/templates/registry';
 import { extractColors } from '@/lib/smartColor';
 import { removeBackgroundFromDataURI } from '@/lib/bgRemoval';
@@ -189,23 +188,14 @@ export default function Editor({ config }: EditorProps) {
       ? 'true'
       : 'false';
 
-  const previewHtml = useMemo(() => {
-    if (!templateHtml) return '';
-    return renderTemplate(templateHtml, {
+  const previewValues = useMemo(
+    () => ({
       ...fieldValues,
       titleSize: String(fitConfig.maxFontSize),
       cutoutActive,
-    });
-  }, [templateHtml, fieldValues, fitConfig.maxFontSize, cutoutActive]);
-
-  const getExportHtml = useCallback(() => {
-    if (!templateHtml) return '';
-    return renderTemplate(templateHtml, {
-      ...fieldValues,
-      titleSize: String(titleSizeRef.current),
-      cutoutActive,
-    });
-  }, [templateHtml, fieldValues, cutoutActive]);
+    }),
+    [fieldValues, fitConfig.maxFontSize, cutoutActive]
+  );
 
   const sidebarEl = (
     <EditorSidebar
@@ -227,7 +217,6 @@ export default function Editor({ config }: EditorProps) {
       variantCode={variantCode}
       format={variant.exportFormat}
       fields={fieldValues}
-      getExportHtml={getExportHtml}
       getScreenElement={() => previewRef.current?.getScreenElement() || null}
       width={variant.width}
       height={variant.height}
@@ -241,7 +230,6 @@ export default function Editor({ config }: EditorProps) {
       variantCode={variantCode}
       format={variant.exportFormat}
       fields={fieldValues}
-      getExportHtml={getExportHtml}
       getScreenElement={() => previewRef.current?.getScreenElement() || null}
       width={variant.width}
       height={variant.height}
@@ -255,7 +243,6 @@ export default function Editor({ config }: EditorProps) {
       variantCode={variantCode}
       format={variant.exportFormat}
       fields={fieldValues}
-      getExportHtml={getExportHtml}
       getScreenElement={() => previewRef.current?.getScreenElement() || null}
       width={variant.width}
       height={variant.height}
@@ -292,7 +279,8 @@ export default function Editor({ config }: EditorProps) {
         {!isMobile && <div className={styles.sidebarWrap}>{sidebarEl}</div>}
         <EditorPreview
           ref={previewRef}
-          html={previewHtml}
+          templateHtml={templateHtml}
+          values={previewValues}
           variant={variant}
           maxFontSize={fitConfig.maxFontSize}
           minFontSize={fitConfig.minFontSize}

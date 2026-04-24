@@ -13,7 +13,6 @@ interface DownloadButtonProps {
   variantCode: string;
   format: 'png' | 'pdf';
   fields: Record<string, string>;
-  getExportHtml: () => string;
   getScreenElement: () => HTMLElement | null;
   width: number;
   height: number;
@@ -33,7 +32,6 @@ export default function DownloadButton({
   variantCode,
   format,
   fields,
-  getExportHtml,
   getScreenElement,
   width,
   height,
@@ -95,6 +93,13 @@ export default function DownloadButton({
         return;
       }
 
+      // iOS Safari quirk: html-to-image uses <foreignObject> in SVG. Large
+      // data-URI JPEGs inside foreignObject sometimes render as a white
+      // rectangle on iOS. Pre-baking each img through a canvas (decode → PNG)
+      // sidesteps it — the replacement data URI is a clean PNG that iOS
+      // reliably rasterises.
+      await prepareImagesForCapture(screenEl);
+
       const dataUrl = await toPng(screenEl, {
         width,
         height,
@@ -144,4 +149,45 @@ function downloadBlob(blob: Blob, filename: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+async function decodeImage(img: HTMLImageElement): Promise<void> {
+  if (img.complete && img.naturalWidth > 0) return;
+  try {
+    await img.decode();
+  } catch {
+    await new Promise<void>((resolve) => {
+      const done = () => resolve();
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
+      setTimeout(done, 3000);
+    });
+  }
+}
+
+async function prepareImagesForCapture(root: HTMLElement): Promise<void> {
+  const imgs = Array.from(root.querySelectorAll('img'));
+  await Promise.all(
+    imgs.map(async (img) => {
+      await decodeImage(img);
+      const src = img.getAttribute('src') || '';
+      if (!src.startsWith('data:')) return;
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      if (!w || !h) return;
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0);
+        const baked = canvas.toDataURL('image/png');
+        if (baked && baked !== src) img.setAttribute('src', baked);
+        await decodeImage(img);
+      } catch {
+        /* if baking fails, fall through with original src */
+      }
+    })
+  );
 }
