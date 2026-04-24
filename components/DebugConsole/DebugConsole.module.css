@@ -1,0 +1,145 @@
+.trigger {
+  position: fixed;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 1100;
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-md);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.trigger:active {
+  transform: scale(0.95);
+}
+
+.trigger[data-active='true'] {
+  background: var(--error);
+}
+
+.badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: #0b0b0d;
+  color: #f2f2f5;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #22232a;
+  flex-shrink: 0;
+}
+
+.title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-family: var(--font-primary);
+}
+
+.headerBtn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #c6c6cc;
+  transition: background 0.15s ease;
+}
+
+.headerBtn:active {
+  background: #22232a;
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 0 16px;
+}
+
+.empty {
+  padding: 24px 16px;
+  color: #8a8a95;
+  font-size: 13px;
+  text-align: center;
+  font-family: var(--font-primary);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+  border-bottom: 1px solid #17181d;
+  word-break: break-word;
+}
+
+.row[data-level='warn'] {
+  background: rgba(255, 149, 0, 0.08);
+}
+
+.row[data-level='error'] {
+  background: rgba(255, 59, 48, 0.12);
+}
+
+.rowTime {
+  color: #6a6b75;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rowTag {
+  color: #7cc4ff;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rowMsg {
+  color: #f2f2f5;
+  white-space: pre-wrap;
+}
+
+.row[data-level='warn'] .rowMsg {
+  color: #ffb45c;
+}
+
+.row[data-level='error'] .rowMsg {
+  color: #ff8a82;
+}
