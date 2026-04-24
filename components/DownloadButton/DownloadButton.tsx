@@ -262,6 +262,66 @@ function canvasHasPixels(ctx: CanvasRenderingContext2D, w: number, h: number): b
   }
 }
 
+function parsePercent(token: string): number {
+  if (!token) return 0.5;
+  if (token.endsWith('%')) return parseFloat(token) / 100;
+  if (token === 'left' || token === 'top') return 0;
+  if (token === 'right' || token === 'bottom') return 1;
+  if (token === 'center') return 0.5;
+  const n = parseFloat(token);
+  return Number.isFinite(n) ? n / 100 : 0.5;
+}
+
+/**
+ * Emulate object-fit: cover with object-position by computing the draw rect
+ * for ctx.drawImage. Lets us bake the visual crop into the canvas pixels so
+ * we can output at the displayed (smaller) size and as JPEG.
+ */
+function drawWithCover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  targetW: number,
+  targetH: number,
+  objectPosition: string
+): void {
+  const naturalW = img.naturalWidth;
+  const naturalH = img.naturalHeight;
+  const naturalAspect = naturalW / naturalH;
+  const targetAspect = targetW / targetH;
+
+  const tokens = (objectPosition || '50% 50%').split(/\s+/);
+  const posX = parsePercent(tokens[0] || '50%');
+  const posY = parsePercent(tokens[1] || '50%');
+
+  let drawW: number;
+  let drawH: number;
+  let drawX: number;
+  let drawY: number;
+
+  if (naturalAspect > targetAspect) {
+    // Source wider — fit height, crop sides
+    drawH = targetH;
+    drawW = drawH * naturalAspect;
+    drawX = (targetW - drawW) * posX;
+    drawY = 0;
+  } else {
+    // Source taller — fit width, crop top/bottom
+    drawW = targetW;
+    drawH = drawW / naturalAspect;
+    drawX = 0;
+    drawY = (targetH - drawH) * posY;
+  }
+
+  ctx.drawImage(img, drawX, drawY, drawW, drawH);
+}
+
+/**
+ * For each <img>: bake the visible CSS filter + object-fit cover into canvas
+ * pixels at the displayed size (typically 1200×1500 for our templates), then
+ * output as JPEG when no transparency is needed (filter applied or source
+ * was JPEG) — drastically smaller than re-encoding photos as PNG, which is
+ * what was bloating the foreignObject and crashing the iOS export.
+ */
 async function prepareImagesForCapture(root: HTMLElement): Promise<void> {
   const imgs = Array.from(root.querySelectorAll('img'));
   debugLog.info('bake', `found ${imgs.length} <img> in screen`);
@@ -273,64 +333,99 @@ async function prepareImagesForCapture(root: HTMLElement): Promise<void> {
       debugLog.info(`img${idx}`, `class=${cls} src=${srcPreview(src)} liveNatural=${img.naturalWidth}x${img.naturalHeight}`);
 
       if (!src.startsWith('data:')) {
-        debugLog.info(`img${idx}`, 'src is not data URI — skipping bake');
+        debugLog.info(`img${idx}`, 'src is not data URI — skipping');
+        return;
+      }
+
+      const cs = getComputedStyle(img);
+      const filter = cs.filter;
+      const hasFilter = !!filter && filter !== 'none';
+      const objectFit = cs.objectFit || 'fill';
+      const objectPosition = cs.objectPosition || '50% 50%';
+
+      // Use the layout (CSS pixel) size of the element — that's what toPng
+      // will draw at, and matches the variant export resolution because the
+      // template's .screen has explicit width/height in px.
+      const targetW = img.clientWidth || img.naturalWidth;
+      const targetH = img.clientHeight || img.naturalHeight;
+
+      if (!targetW || !targetH) {
+        debugLog.warn(`img${idx}`, `bad target size ${targetW}x${targetH} — skipping`);
         return;
       }
 
       const t0 = performance.now();
       const fresh = await decodeFreshImage(src);
       if (!fresh) {
-        debugLog.warn(`img${idx}`, `decodeFreshImage returned null (decode failed or naturalW=0)`);
+        debugLog.warn(`img${idx}`, `decodeFreshImage returned null`);
         return;
       }
-      debugLog.info(`img${idx}`, `fresh decoded ${fresh.naturalWidth}x${fresh.naturalHeight} in ${Math.round(performance.now() - t0)}ms`);
-
-      const w = fresh.naturalWidth;
-      const h = fresh.naturalHeight;
+      debugLog.info(`img${idx}`, `fresh decoded ${fresh.naturalWidth}x${fresh.naturalHeight} in ${Math.round(performance.now() - t0)}ms; target=${targetW}x${targetH} fit=${objectFit} pos=${objectPosition}`);
 
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
+        canvas.width = targetW;
+        canvas.height = targetH;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           debugLog.error(`img${idx}`, 'getContext("2d") returned null');
           return;
         }
 
-        const computedFilter = getComputedStyle(img).filter;
-        if (computedFilter && computedFilter !== 'none') {
-          debugLog.info(`img${idx}`, `baking CSS filter: ${computedFilter}`);
-          ctx.filter = computedFilter;
+        if (hasFilter) {
+          debugLog.info(`img${idx}`, `baking CSS filter: ${filter}`);
+          ctx.filter = filter;
         }
 
-        ctx.drawImage(fresh, 0, 0);
+        if (objectFit === 'cover' || objectFit === 'fill') {
+          drawWithCover(ctx, fresh, targetW, targetH, objectPosition);
+        } else {
+          // Fallback — stretch to fit (matches default 'fill')
+          ctx.drawImage(fresh, 0, 0, targetW, targetH);
+        }
+
         ctx.filter = 'none';
 
-        const hasPixels = canvasHasPixels(ctx, w, h);
-        if (!hasPixels) {
-          debugLog.warn(`img${idx}`, 'canvas centre pixel is transparent — drawImage likely failed silently, skipping');
+        if (!canvasHasPixels(ctx, targetW, targetH)) {
+          debugLog.warn(`img${idx}`, 'canvas centre pixel is transparent — drawImage failed silently, skipping');
           return;
         }
 
-        const baked = canvas.toDataURL('image/png');
-        debugLog.info(`img${idx}`, `baked PNG len=${baked.length}`);
+        // Choose output format. JPEG is ~5x smaller than PNG for photos and
+        // is what iOS Safari foreignObject digests reliably. PNG only when
+        // the source was PNG and there's no filter overriding it (likely a
+        // cutout that needs alpha).
+        const isPng = src.startsWith('data:image/png');
+        const useJpeg = hasFilter || !isPng;
+        const baked = useJpeg
+          ? canvas.toDataURL('image/jpeg', 0.85)
+          : canvas.toDataURL('image/png');
 
-        if (!baked || baked === src) {
-          debugLog.warn(`img${idx}`, 'baked data URL empty or equal to original — skipping');
+        debugLog.info(`img${idx}`, `baked ${useJpeg ? 'jpeg' : 'png'} len=${baked.length} (src was ${src.length})`);
+
+        if (!baked) {
+          debugLog.warn(`img${idx}`, 'toDataURL returned empty');
+          return;
+        }
+        if (baked === src) {
+          debugLog.info(`img${idx}`, 'baked equals original — leaving original src');
           return;
         }
 
         img.setAttribute('src', baked);
         img.style.filter = 'none';
-        debugLog.info(`img${idx}`, 'new src set + inline filter:none');
+        // The visual crop is now baked into the bitmap; tell the browser to
+        // stretch the new image to the box without re-cropping.
+        img.style.objectFit = 'fill';
+        img.style.objectPosition = '0 0';
+        debugLog.info(`img${idx}`, 'replaced src + filter/object-fit reset');
 
         if (!(img.complete && img.naturalWidth > 0)) {
           try {
             await img.decode();
-            debugLog.info(`img${idx}`, `live img re-decoded ${img.naturalWidth}x${img.naturalHeight}`);
+            debugLog.info(`img${idx}`, `live re-decoded ${img.naturalWidth}x${img.naturalHeight}`);
           } catch (err) {
-            debugLog.warn(`img${idx}`, `live img re-decode threw: ${String(err)}`);
+            debugLog.warn(`img${idx}`, `live re-decode threw: ${String(err)}`);
           }
         }
       } catch (err) {
