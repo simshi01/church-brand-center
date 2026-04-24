@@ -222,37 +222,33 @@ async function captureScreenToPng(
       )
     );
 
-    // Step 1: collapse every element with clip-path:polygon and stacked imgs
-    // into a single flat <img> at the element's box size. iOS Safari's
-    // foreignObject can't render the original layered structure (clip-path
-    // + position:absolute + multiple data-URI imgs). After this step the
-    // SVG sees a single plain block element with one <img> baked at fixed
-    // pixel size — exactly what foreignObject reliably rasterises.
-    const composited = await compositeClippedContainers(cloneScreen);
-    debugLog.info('capture', `composited ${composited} clipped container(s)`);
-
-    // Step 2: bake any remaining imgs (e.g., logos) for size.
-    await prepareImagesForCapture(cloneScreen);
-
     await doubleRaf();
 
-    // Diagnostic: dump cloned DOM state so we can tell whether the img is
-    // actually present right before the renderer runs.
-    const finalImgs = Array.from(cloneScreen.querySelectorAll('img'));
-    debugLog.info('capture', `pre-render: cloneScreen.outerHTML len=${cloneScreen.outerHTML.length}; imgs=${finalImgs.length}`);
-    finalImgs.forEach((im, i) => {
-      debugLog.info('capture', `pre-render img${i}: complete=${im.complete} natural=${im.naturalWidth}x${im.naturalHeight} attrW=${im.getAttribute('width')} attrH=${im.getAttribute('height')} srcLen=${im.getAttribute('src')?.length ?? 0}`);
+    // Diagnostic: dump cloned DOM state so we can tell whether imgs are
+    // present and decoded right before the renderer runs.
+    const preImgs = Array.from(cloneScreen.querySelectorAll('img'));
+    debugLog.info('capture', `pre-render: cloneScreen.outerHTML len=${cloneScreen.outerHTML.length}; imgs=${preImgs.length}`);
+    preImgs.forEach((im, i) => {
+      debugLog.info('capture', `pre-render img${i}: complete=${im.complete} natural=${im.naturalWidth}x${im.naturalHeight} srcLen=${im.getAttribute('src')?.length ?? 0}`);
     });
 
-    // Primary: html2canvas (direct Canvas 2D rendering; does NOT use SVG
-    // foreignObject so it's not affected by the iOS WebKit bug that silently
-    // drops imgs inside foreignObject).
+    // Primary: html2canvas on the *unmutated* clone. html2canvas paints
+    // through Canvas 2D and natively supports the CSS filter and clip-path
+    // we use — feeding it the original layered structure preserves layout
+    // and gives us grayscale bg + colour cutout for free. Our previous
+    // composite/bake mutations were written for html-to-image's foreignObject
+    // path and actually broke both things on iOS Safari (ctx.filter ignored,
+    // layout shifted by explicit container sizing).
     let blob = await renderWithHtml2Canvas(cloneScreen, width, height);
 
-    // Fallback: html-to-image (foreignObject-based). Kept because html2canvas
-    // has its own edge cases.
+    // Fallback: html-to-image. Only used if html2canvas failed entirely —
+    // its foreignObject path still needs the composite+bake workaround.
     if (!blob || blob.size < MIN_EXPECTED_PNG_BYTES) {
-      debugLog.warn('capture', 'html2canvas output too small or missing — falling back to html-to-image');
+      debugLog.warn('capture', 'html2canvas output too small or missing — falling back to html-to-image (with composite+bake)');
+      const composited = await compositeClippedContainers(cloneScreen);
+      debugLog.info('capture', `fallback composited ${composited} clipped container(s)`);
+      await prepareImagesForCapture(cloneScreen);
+      await doubleRaf();
       const fallback = await renderWithHtmlToImage(cloneScreen, width, height);
       if (fallback && (!blob || fallback.size > blob.size)) {
         debugLog.info('capture', `fallback improved: ${blob?.size ?? 0} -> ${fallback.size}`);
