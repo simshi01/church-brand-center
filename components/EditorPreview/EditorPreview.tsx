@@ -39,20 +39,38 @@ const EditorPreview = forwardRef<EditorPreviewHandle, EditorPreviewProps>(({
     },
   }));
 
-  // Scale calculation
+  // Scale calculation — reads padding from computed style so it works across
+  // all breakpoints and dynamic paddings (e.g., --reserved-bottom driven by
+  // the mobile bottom sheet). ResizeObserver covers container size changes
+  // that don't trigger window 'resize' — sheet snap, keyboard, orientation.
   const updateScale = useCallback(() => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const padding = 48;
-    const availW = rect.width - padding * 2;
-    const availH = rect.height - padding * 2;
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    const padT = parseFloat(cs.paddingTop) || 0;
+    const padB = parseFloat(cs.paddingBottom) || 0;
+    const availW = Math.max(0, rect.width - padL - padR);
+    const availH = Math.max(0, rect.height - padT - padB);
+    if (availW === 0 || availH === 0) return;
     setScale(Math.min(availW / variant.width, availH / variant.height, 1));
   }, [variant.width, variant.height]);
 
   useEffect(() => {
     updateScale();
+    const el = containerRef.current;
     window.addEventListener('resize', updateScale);
-    return () => window.removeEventListener('resize', updateScale);
+    let ro: ResizeObserver | null = null;
+    if (el && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(updateScale);
+      ro.observe(el);
+    }
+    return () => {
+      window.removeEventListener('resize', updateScale);
+      ro?.disconnect();
+    };
   }, [updateScale]);
 
   // Render HTML + fit title — all synchronous BEFORE paint (no flicker)

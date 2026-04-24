@@ -81,3 +81,27 @@
   border-color: var(--border-focus);
   background: var(--bg);
 }
+
+@media (max-width: 767px) {
+  .row {
+    gap: 12px;
+  }
+
+  .swatch {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+  }
+
+  .hexInput {
+    height: 44px;
+    padding: 0 12px;
+    font-size: 16px;
+    border-radius: 10px;
+  }
+
+  .resetBtn {
+    font-size: var(--text-sm);
+    padding: 4px 6px;
+  }
+}

@@ -7,6 +7,21 @@
   background: var(--bg-secondary);
   overflow: hidden;
   min-height: 0;
+  padding: 48px;
+  transition: padding-bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (max-width: 1200px) {
+  .container {
+    padding: 32px;
+  }
+}
+
+@media (max-width: 767px) {
+  .container {
+    padding: 12px;
+    padding-bottom: calc(12px + var(--reserved-bottom, 0px));
+  }
 }
 
 .processingOverlay {

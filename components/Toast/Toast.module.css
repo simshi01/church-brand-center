@@ -37,3 +37,19 @@
     transform: translateY(0);
   }
 }
+
+@media (max-width: 767px) {
+  .container {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    right: 12px;
+    left: 12px;
+    align-items: stretch;
+  }
+
+  .toast {
+    padding: 14px 18px;
+    font-size: var(--text-sm);
+    text-align: center;
+    line-height: 1.35;
+  }
+}

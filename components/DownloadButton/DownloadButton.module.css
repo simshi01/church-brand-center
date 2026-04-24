@@ -1,9 +1,8 @@
 .btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  height: 44px;
-  padding: 0 20px;
   background: var(--accent);
   color: white;
   border-radius: 10px;
@@ -20,9 +19,34 @@
 
 .btn:active:not(:disabled) {
   transform: scale(0.98);
+  transition: transform 0.1s ease;
 }
 
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.btnFull {
+  height: 44px;
+  padding: 0 20px;
+}
+
+.btnIcon {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  gap: 0;
+  border-radius: 10px;
+}
+
+.btnBlock {
+  width: 100%;
+  height: 48px;
+  padding: 0 20px;
+  font-size: var(--text-base);
+}
+
+.btnBlock:hover:not(:disabled) {
+  transform: none;
 }

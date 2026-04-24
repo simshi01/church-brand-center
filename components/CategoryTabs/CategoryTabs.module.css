@@ -32,3 +32,26 @@
   height: 2px;
   background: var(--accent);
 }
+
+@media (max-width: 767px) {
+  .tabs {
+    gap: 20px;
+    height: 44px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    font-size: var(--text-sm);
+    flex-shrink: 0;
+    padding: 12px 0;
+  }
+}

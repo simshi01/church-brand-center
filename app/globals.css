@@ -121,3 +121,22 @@ img {
   display: block;
   max-width: 100%;
 }
+
+/* ── Mobile-wide rules ── */
+/*
+ * z-index scale (for reference):
+ *   100  — SizeSelector dropdown (desktop)
+ *   200  — Editor header
+ *   900  — BottomSheet
+ *   950  — SizeSelector mobile modal portal
+ *   1000 — Toast
+ */
+@media (max-width: 767px) {
+  html {
+    touch-action: manipulation; /* kill 300ms double-tap delay */
+  }
+
+  body {
+    overscroll-behavior-y: none; /* no pull-to-refresh over the editor */
+  }
+}

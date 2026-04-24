@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, CSSProperties } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { TemplateConfig } from '@/lib/types';
@@ -9,10 +9,12 @@ import { getTemplateHtml } from '@/templates/registry';
 import { extractColors } from '@/lib/smartColor';
 import { removeBackgroundFromDataURI } from '@/lib/bgRemoval';
 import { useToast } from '@/lib/toastContext';
+import { MOBILE_QUERY, useMediaQuery } from '@/lib/useMediaQuery';
 import EditorSidebar from '@/components/EditorSidebar/EditorSidebar';
 import EditorPreview, { EditorPreviewHandle } from '@/components/EditorPreview/EditorPreview';
 import SizeSelector from '@/components/SizeSelector/SizeSelector';
 import DownloadButton from '@/components/DownloadButton/DownloadButton';
+import BottomSheet, { getSnapHeight, SnapPoint } from '@/components/BottomSheet/BottomSheet';
 import type { CutoutStatus } from '@/components/ImageUploader/ImageUploader';
 import styles from './Editor.module.css';
 
@@ -21,6 +23,9 @@ interface EditorProps {
 }
 
 export default function Editor({ config }: EditorProps) {
+  const isMobile = useMediaQuery(MOBILE_QUERY);
+  const [sheetSnap, setSheetSnap] = useState<SnapPoint>('half');
+
   const [variantCode, setVariantCode] = useState(config.variants[0].code);
   const variant = config.variants.find((v) => v.code === variantCode) || config.variants[0];
   const titleOverrides = variant.fieldOverrides?.title;
@@ -202,11 +207,74 @@ export default function Editor({ config }: EditorProps) {
     });
   }, [templateHtml, fieldValues, cutoutActive]);
 
+  const sidebarEl = (
+    <EditorSidebar
+      fields={config.fields}
+      values={fieldValues}
+      onChange={handleFieldChange}
+      autoColorKeys={autoColorKeys}
+      onResetAutoColor={handleResetAutoColor}
+      cutoutFieldKey={smartCutoutField?.key}
+      cutoutEnabled={cutoutEnabled}
+      onCutoutToggle={handleCutoutToggle}
+      cutoutStatus={cutoutStatus}
+    />
+  );
+
+  const downloadFullButton = (
+    <DownloadButton
+      templateId={config.id}
+      variantCode={variantCode}
+      format={variant.exportFormat}
+      fields={fieldValues}
+      getExportHtml={getExportHtml}
+      getScreenElement={() => previewRef.current?.getScreenElement() || null}
+      width={variant.width}
+      height={variant.height}
+      variant="full"
+    />
+  );
+
+  const downloadIconButton = (
+    <DownloadButton
+      templateId={config.id}
+      variantCode={variantCode}
+      format={variant.exportFormat}
+      fields={fieldValues}
+      getExportHtml={getExportHtml}
+      getScreenElement={() => previewRef.current?.getScreenElement() || null}
+      width={variant.width}
+      height={variant.height}
+      variant="icon"
+    />
+  );
+
+  const downloadBlockButton = (
+    <DownloadButton
+      templateId={config.id}
+      variantCode={variantCode}
+      format={variant.exportFormat}
+      fields={fieldValues}
+      getExportHtml={getExportHtml}
+      getScreenElement={() => previewRef.current?.getScreenElement() || null}
+      width={variant.width}
+      height={variant.height}
+      variant="block"
+    />
+  );
+
+  // Reserve space at the bottom of preview equal to current sheet height
+  // so the scale calculation sees the actually-available area.
+  const reservedBottom = isMobile ? getSnapHeight(sheetSnap) : 0;
+  const previewStyle: CSSProperties = isMobile
+    ? ({ ['--reserved-bottom' as string]: `${reservedBottom}px` } as CSSProperties)
+    : {};
+
   return (
     <div className={styles.editor}>
       <header className={styles.header}>
         <div className={styles.headerLeft}>
-          <Link href="/" className={styles.backBtn}>
+          <Link href="/" className={styles.backBtn} aria-label="Назад к галерее">
             <ArrowLeft size={20} strokeWidth={1.5} />
           </Link>
           <span className={styles.templateName}>{config.name}</span>
@@ -217,30 +285,11 @@ export default function Editor({ config }: EditorProps) {
             current={variantCode}
             onChange={setVariantCode}
           />
-          <DownloadButton
-            templateId={config.id}
-            variantCode={variantCode}
-            format={variant.exportFormat}
-            fields={fieldValues}
-            getExportHtml={getExportHtml}
-            getScreenElement={() => previewRef.current?.getScreenElement() || null}
-            width={variant.width}
-            height={variant.height}
-          />
+          {isMobile ? downloadIconButton : downloadFullButton}
         </div>
       </header>
-      <div className={styles.body}>
-        <EditorSidebar
-          fields={config.fields}
-          values={fieldValues}
-          onChange={handleFieldChange}
-          autoColorKeys={autoColorKeys}
-          onResetAutoColor={handleResetAutoColor}
-          cutoutFieldKey={smartCutoutField?.key}
-          cutoutEnabled={cutoutEnabled}
-          onCutoutToggle={handleCutoutToggle}
-          cutoutStatus={cutoutStatus}
-        />
+      <div className={styles.body} style={previewStyle}>
+        {!isMobile && <div className={styles.sidebarWrap}>{sidebarEl}</div>}
         <EditorPreview
           ref={previewRef}
           html={previewHtml}
@@ -251,6 +300,21 @@ export default function Editor({ config }: EditorProps) {
           cutoutProcessing={cutoutStatus.kind === 'downloading' || cutoutStatus.kind === 'processing'}
         />
       </div>
+
+      {isMobile && (
+        <BottomSheet
+          open
+          snap={sheetSnap}
+          onSnapChange={setSheetSnap}
+          snapPoints={['collapsed', 'half', 'full']}
+          peekHeight={72}
+          title="Редактировать"
+          ariaLabel="Панель редактирования шаблона"
+          footer={downloadBlockButton}
+        >
+          {sidebarEl}
+        </BottomSheet>
+      )}
     </div>
   );
 }

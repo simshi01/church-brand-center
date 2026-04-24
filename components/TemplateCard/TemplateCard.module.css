@@ -63,3 +63,23 @@
   padding: 3px 8px;
   border-radius: 6px;
 }
+
+.card:active {
+  transform: scale(0.995);
+  transition: transform 0.1s ease;
+}
+
+@media (max-width: 767px) {
+  .card {
+    border-radius: 14px;
+  }
+
+  .card:hover {
+    transform: none; /* disable hover lift on touch */
+    box-shadow: var(--shadow-card);
+  }
+
+  .body {
+    padding: 14px;
+  }
+}

@@ -48,3 +48,12 @@
   color: var(--text-secondary);
   pointer-events: none;
 }
+
+@media (max-width: 767px) {
+  .select {
+    padding: 12px 36px 12px 14px;
+    font-size: 16px; /* prevent iOS zoom */
+    border-radius: 10px;
+    min-height: 44px;
+  }
+}

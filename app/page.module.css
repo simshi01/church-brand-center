@@ -9,6 +9,7 @@
   height: 64px;
   padding: 0 32px;
   border-bottom: 1px solid var(--border-light);
+  gap: 16px;
 }
 
 .logo {
@@ -17,8 +18,35 @@
   font-size: var(--text-xl);
   letter-spacing: -0.02em;
   line-height: 1.15;
+  flex-shrink: 0;
 }
 
 .main {
   padding: 32px;
+}
+
+@media (min-width: 768px) and (max-width: 1200px) {
+  .header {
+    padding: 0 24px;
+  }
+
+  .main {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 767px) {
+  .header {
+    height: 56px;
+    padding: 0 16px;
+    gap: 12px;
+  }
+
+  .logo {
+    font-size: var(--text-lg);
+  }
+
+  .main {
+    padding: 16px;
+  }
 }

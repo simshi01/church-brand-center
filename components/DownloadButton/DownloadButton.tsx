@@ -6,6 +6,8 @@ import { toPng } from 'html-to-image';
 import { useToast } from '@/lib/toastContext';
 import styles from './DownloadButton.module.css';
 
+type DownloadVariant = 'full' | 'icon' | 'block';
+
 interface DownloadButtonProps {
   templateId: string;
   variantCode: string;
@@ -15,6 +17,15 @@ interface DownloadButtonProps {
   getScreenElement: () => HTMLElement | null;
   width: number;
   height: number;
+  variant?: DownloadVariant;
+}
+
+function isIOS(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return (
+    /iPhone|iPad|iPod/.test(navigator.userAgent) &&
+    !(window as unknown as { MSStream?: unknown }).MSStream
+  );
 }
 
 export default function DownloadButton({
@@ -26,9 +37,22 @@ export default function DownloadButton({
   getScreenElement,
   width,
   height,
+  variant = 'full',
 }: DownloadButtonProps) {
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
+
+  const notifySuccess = useCallback(() => {
+    if (isIOS() && format === 'png') {
+      showToast(
+        'Готово! Удерживай изображение и выбери «Сохранить в Фото»',
+        'success',
+        4500
+      );
+    } else {
+      showToast('Готово!', 'success');
+    }
+  }, [format, showToast]);
 
   const handleDownload = useCallback(async () => {
     setLoading(true);
@@ -47,14 +71,23 @@ export default function DownloadButton({
       if (contentType.includes('image/') || contentType.includes('application/pdf')) {
         const blob = await res.blob();
         downloadBlob(blob, `${templateId}-${variantCode}.${format}`);
-        showToast('Готово!', 'success');
+        notifySuccess();
         setLoading(false);
         return;
       }
 
-      // No Puppeteer — capture the actual preview .screen element directly
+      // No Puppeteer — capture the actual preview .screen element directly.
       // html-to-image renders it at the element's real DOM size (full pixels),
-      // ignoring the parent's CSS transform: scale()
+      // ignoring the parent's CSS transform: scale().
+      // Make sure fonts are ready before capture (important on mobile).
+      if (typeof document !== 'undefined' && 'fonts' in document) {
+        try {
+          await document.fonts.ready;
+        } catch {
+          /* noop */
+        }
+      }
+
       const screenEl = getScreenElement();
       if (!screenEl) {
         showToast('Ошибка: элемент не найден', 'error');
@@ -76,23 +109,30 @@ export default function DownloadButton({
       const response = await fetch(dataUrl);
       const blob = await response.blob();
       downloadBlob(blob, `${templateId}-${variantCode}.png`);
-      showToast('Готово!', 'success');
+      notifySuccess();
       setLoading(false);
     } catch (err) {
       console.error('Export error:', err);
       showToast('Ошибка генерации', 'error');
       setLoading(false);
     }
-  }, [templateId, variantCode, format, fields, getScreenElement, width, height, showToast]);
+  }, [templateId, variantCode, format, fields, getScreenElement, width, height, showToast, notifySuccess]);
+
+  const className = `${styles.btn} ${
+    variant === 'icon' ? styles.btnIcon : variant === 'block' ? styles.btnBlock : styles.btnFull
+  }`;
 
   return (
     <button
-      className={styles.btn}
+      className={className}
       onClick={handleDownload}
       disabled={loading}
+      aria-label="Скачать"
     >
-      <Download size={16} strokeWidth={1.5} />
-      {loading ? 'Генерирую...' : 'Скачать'}
+      <Download size={variant === 'block' ? 18 : 16} strokeWidth={1.5} />
+      {variant !== 'icon' && (
+        <span>{loading ? 'Генерирую...' : 'Скачать'}</span>
+      )}
     </button>
   );
 }

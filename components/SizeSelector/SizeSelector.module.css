@@ -64,3 +64,144 @@
   color: var(--text-tertiary);
   font-size: var(--text-xs);
 }
+
+/* Mobile modal */
+.modalRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  display: flex;
+  align-items: flex-end;
+  justify-content: stretch;
+}
+
+.modalBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  animation: fadeIn 0.2s ease;
+}
+
+.modalSheet {
+  position: relative;
+  width: 100%;
+  max-height: 70vh;
+  background: var(--bg);
+  border-radius: 16px 16px 0 0;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-light);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.modalTitle {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modalClose {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--text-tertiary);
+  transition: all 0.2s ease;
+}
+
+.modalClose:active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.modalList {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 8px 12px;
+}
+
+.modalOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  transition: background 0.15s ease;
+  text-align: left;
+}
+
+.modalOption:active {
+  background: var(--bg-tertiary);
+}
+
+.modalOptionActive {
+  background: var(--bg-tertiary);
+}
+
+.modalOptionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modalOptionLabel {
+  font-weight: 600;
+}
+
+.modalOptionDims {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* Mobile trigger adaptation */
+@media (max-width: 767px) {
+  .trigger {
+    height: 40px;
+    padding: 0 10px;
+    font-size: var(--text-xs);
+    gap: 6px;
+  }
+
+  .dims {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1200px) {
+  .trigger {
+    font-size: var(--text-sm);
+  }
+}
