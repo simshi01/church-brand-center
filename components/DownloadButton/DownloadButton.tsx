@@ -192,13 +192,12 @@ async function captureScreenToPng(
   // preview. The cloned <style> tag carries the template's CSS rules so
   // the cloned .screen has its 1200×1500 layout context.
   //
-  // We keep the wrapper on-screen at (0,0) with visibility:hidden instead
-  // of shoving it to left:-99999px. html2canvas computes positions from
-  // getBoundingClientRect and some bugs fire when the element is parked
-  // far outside the viewport (flex gap mis-handling, baseline drift).
-  // visibility:hidden keeps layout intact without painting.
+  // Position the wrapper off to the left (not visibility:hidden) —
+  // visibility cascades to descendants and our composite filter drops
+  // "invisible" imgs, ending up with an empty canvas. left:-99999 keeps
+  // layout alive and imgs decodable without painting.
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = `position:fixed;left:0;top:0;width:${width}px;height:${height}px;visibility:hidden;pointer-events:none;z-index:-1;overflow:hidden;`;
+  wrapper.style.cssText = 'position:fixed;left:-99999px;top:0;pointer-events:none;';
   // Disable transitions/animations on every cloned element so we never
   // capture a half-finished filter swap.
   const noAnim = document.createElement('style');
