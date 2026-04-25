@@ -192,12 +192,15 @@ async function captureScreenToPng(
   // preview. The cloned <style> tag carries the template's CSS rules so
   // the cloned .screen has its 1200×1500 layout context.
   //
-  // Position the wrapper off to the left (not visibility:hidden) —
-  // visibility cascades to descendants and our composite filter drops
-  // "invisible" imgs, ending up with an empty canvas. left:-99999 keeps
-  // layout alive and imgs decodable without painting.
+  // Wrapper sits at viewport (0, 0) with opacity:0 + z-index:-1 so:
+  //   - Layout engine treats it like a regular on-screen element
+  //     (html2canvas was miscomputing bottom-anchored positions when the
+  //     element was parked far off-screen at left:-99999px)
+  //   - User never sees it (opacity:0 is purely visual; nothing cascades
+  //     to descendants like visibility:hidden does, so our composite
+  //     filter still picks up the imgs)
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:fixed;left:-99999px;top:0;pointer-events:none;';
+  wrapper.style.cssText = `position:fixed;left:0;top:0;width:${width}px;height:${height}px;opacity:0;pointer-events:none;z-index:-1;overflow:hidden;`;
   // Disable transitions/animations on every cloned element so we never
   // capture a half-finished filter swap.
   const noAnim = document.createElement('style');
@@ -234,6 +237,12 @@ async function captureScreenToPng(
     // renderer just sees a plain image it can blit to canvas.
     const composited = await compositeClippedContainers(cloneScreen);
     debugLog.info('capture', `composited ${composited} clipped container(s)`);
+
+    // html2canvas miscomputes positions for elements anchored via `bottom`
+    // / `right` — it picks up an offset of ~50px on iOS Safari for our
+    // info rows and legal text. Convert those anchors to explicit `top:
+    // Npx` based on the live DOM's already-correct getBoundingClientRect.
+    inlineBottomAnchors(cloneScreen);
 
     await doubleRaf();
 
@@ -346,6 +355,51 @@ async function renderWithHtmlToImage(
     debugLog.error('h2i', `threw: ${String(err)}`);
     return null;
   }
+}
+
+/**
+ * For every absolutely-positioned descendant that uses `bottom` (or `right`)
+ * as a horizontal/vertical anchor, replace it with an explicit `top: Npx`
+ * (and `left: Npx`) based on the element's live getBoundingClientRect.
+ *
+ * Why: html2canvas miscomputes `position: absolute; bottom: Npx` chains —
+ * even when the live DOM has the element at the correct position, the
+ * library re-derives positions through its own layout pass and ends up with
+ * a vertical offset (we observed ~50px lower than DOM on iOS Safari). After
+ * this conversion only top/left anchors remain, leaving nothing to
+ * miscompute.
+ *
+ * We don't touch existing top/left anchors (header words) or transforms —
+ * those work correctly. We also keep `right: Npx` if it's used together
+ * with `left: Npx` (full stretch, like .screen__info's left:40 right:40).
+ */
+function inlineBottomAnchors(screen: HTMLElement): void {
+  const screenRect = screen.getBoundingClientRect();
+  const all = screen.querySelectorAll<HTMLElement>('*');
+  let count = 0;
+  for (const el of Array.from(all)) {
+    const cs = getComputedStyle(el);
+    if (cs.position !== 'absolute' && cs.position !== 'fixed') continue;
+    const usesBottom = cs.bottom !== 'auto';
+    const usesRightOnly = cs.right !== 'auto' && cs.left === 'auto';
+    if (!usesBottom && !usesRightOnly) continue;
+
+    const r = el.getBoundingClientRect();
+    if (usesBottom) {
+      el.style.top = `${r.top - screenRect.top}px`;
+      el.style.bottom = 'auto';
+    }
+    if (usesRightOnly) {
+      el.style.left = `${r.left - screenRect.left}px`;
+      el.style.right = 'auto';
+    }
+    count++;
+    debugLog.info(
+      'anchor',
+      `${el.className || el.tagName}: top=${Math.round(r.top - screenRect.top)} left=${Math.round(r.left - screenRect.left)}`
+    );
+  }
+  debugLog.info('anchor', `inlined ${count} bottom/right-anchored element(s)`);
 }
 
 function doubleRaf(): Promise<void> {
