@@ -191,8 +191,14 @@ async function captureScreenToPng(
   // Off-screen clone: we'll mutate it freely without breaking the live
   // preview. The cloned <style> tag carries the template's CSS rules so
   // the cloned .screen has its 1200×1500 layout context.
+  //
+  // We keep the wrapper on-screen at (0,0) with visibility:hidden instead
+  // of shoving it to left:-99999px. html2canvas computes positions from
+  // getBoundingClientRect and some bugs fire when the element is parked
+  // far outside the viewport (flex gap mis-handling, baseline drift).
+  // visibility:hidden keeps layout intact without painting.
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:fixed;left:-99999px;top:0;pointer-events:none;';
+  wrapper.style.cssText = `position:fixed;left:0;top:0;width:${width}px;height:${height}px;visibility:hidden;pointer-events:none;z-index:-1;overflow:hidden;`;
   // Disable transitions/animations on every cloned element so we never
   // capture a half-finished filter swap.
   const noAnim = document.createElement('style');
@@ -238,6 +244,22 @@ async function captureScreenToPng(
       debugLog.info('capture', `pre-render img${i}: complete=${im.complete} natural=${im.naturalWidth}x${im.naturalHeight} srcLen=${im.getAttribute('src')?.length ?? 0}`);
     });
 
+    // Diagnostic: cloneScreen size + positions of the info rows. Lets us
+    // tell if html2canvas is seeing the expected geometry or layout is
+    // drifting for some reason.
+    const screenRect = cloneScreen.getBoundingClientRect();
+    debugLog.info('layout', `.screen rect: ${Math.round(screenRect.width)}x${Math.round(screenRect.height)} @ (${Math.round(screenRect.left)},${Math.round(screenRect.top)}) offsetH=${cloneScreen.offsetHeight}`);
+    const infoWrap = cloneScreen.querySelector('.screen__info') as HTMLElement | null;
+    if (infoWrap) {
+      const ir = infoWrap.getBoundingClientRect();
+      debugLog.info('layout', `.screen__info rect: ${Math.round(ir.width)}x${Math.round(ir.height)} top=${Math.round(ir.top - screenRect.top)} bottom-from-screen=${Math.round(screenRect.bottom - ir.bottom)}`);
+    }
+    const infoRows = Array.from(cloneScreen.querySelectorAll('.screen__info-row')) as HTMLElement[];
+    infoRows.forEach((row, i) => {
+      const r = row.getBoundingClientRect();
+      debugLog.info('layout', `.info-row[${i}] top=${Math.round(r.top - screenRect.top)} h=${Math.round(r.height)}`);
+    });
+
     // Primary: html2canvas (Canvas 2D, no foreignObject). Renders the
     // already-composited photo layer plus the remaining text/box elements.
     let blob = await renderWithHtml2Canvas(cloneScreen, width, height);
@@ -271,17 +293,21 @@ async function renderWithHtml2Canvas(
     const canvas = await html2canvas(screenEl, {
       width,
       height,
-      // Keep scale at 1 — we already composited at target resolution.
       scale: 1,
       backgroundColor: '#ffffff',
       useCORS: true,
       logging: false,
-      // The element is off-screen in the fixed wrapper; tell html2canvas
-      // to render at (0,0) within the element rather than viewport-relative.
+      // Normalise render context so baseline / positions don't drift based
+      // on where the wrapper sits in the page or how far the user has
+      // scrolled. Window size set to target so percent-based CSS resolves
+      // consistently.
       x: 0,
       y: 0,
+      scrollX: 0,
+      scrollY: 0,
       windowWidth: width,
       windowHeight: height,
+      foreignObjectRendering: false,
     });
     debugLog.info('h2c', `done in ${Math.round(performance.now() - t0)}ms, canvas ${canvas.width}x${canvas.height}`);
     const blob = await new Promise<Blob | null>((resolve) => {
