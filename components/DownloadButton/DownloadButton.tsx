@@ -268,23 +268,22 @@ async function captureScreenToPng(
       debugLog.info('layout', `.info-row[${i}] top=${Math.round(r.top - screenRect.top)} h=${Math.round(r.height)}`);
     });
 
-    // Primary: html-to-image (SVG foreignObject). Renders text through the
-    // browser's native DOM engine, so the output matches the on-page preview
-    // pixel-for-pixel — no Canvas 2D font-rasteriser quirks ("bolder" text).
-    // The composite step already baked the photo into a flat ~250KB JPEG, so
-    // foreignObject only sees text/boxes + one plain <img>; that's well
-    // within iOS Safari's foreignObject limits. prepareImagesForCapture runs
-    // as a defensive re-bake against stale data URIs in foreignObject.
-    await prepareImagesForCapture(cloneScreen);
-    await doubleRaf();
-    let blob = await renderWithHtmlToImage(cloneScreen, width, height);
+    // Primary: canvas-composite path. Splits the render into two layers:
+    //   1. Photo — drawn straight onto the destination canvas via Canvas 2D
+    //      drawImage. Bypasses foreignObject entirely, so iOS Safari (which
+    //      silently drops large data URI <img>s inside foreignObject) gets
+    //      the photo every time.
+    //   2. Text/boxes — html-to-image renders them through SVG foreignObject
+    //      with a TRANSPARENT background, so the browser's native DOM engine
+    //      handles text (matches on-page preview, no Canvas 2D "bolder" text).
+    // Then the two layers are stacked on one canvas and exported as PNG.
+    let blob = await renderWithCanvasComposite(cloneScreen, width, height);
 
-    // Fallback: html2canvas (Canvas 2D). Used only if foreignObject misbehaves
-    // (returns nothing or a suspiciously tiny blob). Its text rendering looks
-    // slightly bolder than DOM, but historically it was the primary path and
-    // is known to work on every platform.
+    // Fallback: legacy html2canvas. Used only if the composite path produced
+    // nothing usable (rare). Text comes out a touch bolder, but at least the
+    // user gets a downloadable file.
     if (!blob || blob.size < MIN_EXPECTED_PNG_BYTES) {
-      debugLog.warn('capture', 'html-to-image output too small or missing — falling back to html2canvas');
+      debugLog.warn('capture', 'canvas-composite output too small or missing — falling back to html2canvas');
       const fallback = await renderWithHtml2Canvas(cloneScreen, width, height);
       if (fallback && (!blob || fallback.size > blob.size)) {
         debugLog.info('capture', `fallback improved: ${blob?.size ?? 0} -> ${fallback.size}`);
@@ -412,6 +411,115 @@ async function renderWithHtmlToImage(
     debugLog.error('h2i', `threw: ${String(err)}`);
     return null;
   }
+}
+
+/**
+ * Two-layer renderer designed to dodge iOS Safari's foreignObject quirks.
+ *
+ * iOS Safari silently drops <img> with large data URIs that sits inside an
+ * SVG <foreignObject>. Our composited photo (~250KB JPEG) trips that limit,
+ * which is why pure html-to-image gave a blank white photo on iPhone.
+ *
+ * Solution: stop putting the photo through foreignObject at all.
+ *   1. Hide the photo wrapper in the clone and set the .screen background
+ *      to transparent.
+ *   2. Run html-to-image — it now produces a transparent PNG containing only
+ *      text and box layers (small payload, no large embedded images, so
+ *      foreignObject behaves on every browser).
+ *   3. Build a destination canvas, paint white, drawImage the composited
+ *      photo (Canvas 2D drawImage of a data URI is rock-solid on iOS),
+ *      drawImage the text layer on top.
+ *   4. Export the canvas as PNG.
+ *
+ * Result: photo always present, text rendered by the browser's native DOM
+ * engine (matches preview), no platform branching.
+ */
+async function renderWithCanvasComposite(
+  cloneScreen: HTMLElement,
+  width: number,
+  height: number
+): Promise<Blob | null> {
+  const t0 = performance.now();
+
+  // Grab the composited photo (already baked by compositeClippedContainers
+  // earlier in captureScreenToPng — it's a flat <img> with the polygon mask
+  // and grayscale already in the pixels).
+  const photoWrap = cloneScreen.querySelector('.screen__photo-wrap') as HTMLElement | null;
+  const photoImg = photoWrap?.querySelector('img') as HTMLImageElement | null;
+  const photoSrc = photoImg?.getAttribute('src') || '';
+  debugLog.info('canvas-comp', `photoSrc len=${photoSrc.length} hasWrap=${!!photoWrap}`);
+
+  // Hide photo from html-to-image and clear .screen's white fill so the SVG
+  // it produces is a transparent overlay.
+  const savedWrapVis = photoWrap?.style.visibility ?? '';
+  const savedScreenBg = cloneScreen.style.background;
+  if (photoWrap) photoWrap.style.setProperty('visibility', 'hidden', 'important');
+  cloneScreen.style.setProperty('background', 'transparent', 'important');
+
+  await doubleRaf();
+
+  let textDataUrl = '';
+  try {
+    textDataUrl = await toPng(cloneScreen, {
+      width,
+      height,
+      pixelRatio: 1,
+      skipAutoScale: true,
+      skipFonts: true,
+      includeQueryParams: true,
+      imagePlaceholder: TRANSPARENT_PIXEL,
+      backgroundColor: undefined,
+    });
+    debugLog.info('canvas-comp', `text-layer dataUrl len=${textDataUrl ? textDataUrl.length : 0}`);
+  } catch (err) {
+    debugLog.error('canvas-comp', `text-layer toPng threw: ${String(err)}`);
+  } finally {
+    if (photoWrap) photoWrap.style.visibility = savedWrapVis;
+    cloneScreen.style.background = savedScreenBg;
+  }
+
+  if (!textDataUrl) return null;
+
+  const dest = document.createElement('canvas');
+  dest.width = width;
+  dest.height = height;
+  const ctx = dest.getContext('2d');
+  if (!ctx) {
+    debugLog.error('canvas-comp', 'getContext("2d") returned null');
+    return null;
+  }
+
+  // White base — matches .screen's original background.
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+
+  // Photo layer.
+  if (photoSrc) {
+    const photo = await decodeFreshImage(photoSrc);
+    if (photo) {
+      ctx.drawImage(photo, 0, 0, width, height);
+      debugLog.info('canvas-comp', `photo drawn (${photo.naturalWidth}x${photo.naturalHeight})`);
+    } else {
+      debugLog.warn('canvas-comp', 'photo decode returned null — destination will be photo-less');
+    }
+  } else {
+    debugLog.warn('canvas-comp', 'no photoSrc — skipping photo layer');
+  }
+
+  // Text/box layer.
+  const textImg = await decodeFreshImage(textDataUrl);
+  if (!textImg) {
+    debugLog.error('canvas-comp', 'text-layer decode returned null');
+    return null;
+  }
+  ctx.drawImage(textImg, 0, 0, width, height);
+  debugLog.info('canvas-comp', `text layer drawn (${textImg.naturalWidth}x${textImg.naturalHeight})`);
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    dest.toBlob((b) => resolve(b), 'image/png');
+  });
+  debugLog.info('canvas-comp', `done in ${Math.round(performance.now() - t0)}ms blob=${blob?.size ?? 0}B`);
+  return blob;
 }
 
 /**
