@@ -268,17 +268,24 @@ async function captureScreenToPng(
       debugLog.info('layout', `.info-row[${i}] top=${Math.round(r.top - screenRect.top)} h=${Math.round(r.height)}`);
     });
 
-    // Primary: html2canvas (Canvas 2D, no foreignObject). Renders the
-    // already-composited photo layer plus the remaining text/box elements.
-    let blob = await renderWithHtml2Canvas(cloneScreen, width, height);
+    // Primary: html-to-image (SVG foreignObject). Renders text through the
+    // browser's native DOM engine, so the output matches the on-page preview
+    // pixel-for-pixel — no Canvas 2D font-rasteriser quirks ("bolder" text).
+    // The composite step already baked the photo into a flat ~250KB JPEG, so
+    // foreignObject only sees text/boxes + one plain <img>; that's well
+    // within iOS Safari's foreignObject limits. prepareImagesForCapture runs
+    // as a defensive re-bake against stale data URIs in foreignObject.
+    await prepareImagesForCapture(cloneScreen);
+    await doubleRaf();
+    let blob = await renderWithHtmlToImage(cloneScreen, width, height);
 
-    // Fallback: html-to-image. Its foreignObject path may still need extra
-    // img baking since large data URIs get silently dropped there.
+    // Fallback: html2canvas (Canvas 2D). Used only if foreignObject misbehaves
+    // (returns nothing or a suspiciously tiny blob). Its text rendering looks
+    // slightly bolder than DOM, but historically it was the primary path and
+    // is known to work on every platform.
     if (!blob || blob.size < MIN_EXPECTED_PNG_BYTES) {
-      debugLog.warn('capture', 'html2canvas output too small or missing — falling back to html-to-image');
-      await prepareImagesForCapture(cloneScreen);
-      await doubleRaf();
-      const fallback = await renderWithHtmlToImage(cloneScreen, width, height);
+      debugLog.warn('capture', 'html-to-image output too small or missing — falling back to html2canvas');
+      const fallback = await renderWithHtml2Canvas(cloneScreen, width, height);
       if (fallback && (!blob || fallback.size > blob.size)) {
         debugLog.info('capture', `fallback improved: ${blob?.size ?? 0} -> ${fallback.size}`);
         blob = fallback;
