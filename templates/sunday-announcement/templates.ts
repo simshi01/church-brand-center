@@ -3,12 +3,14 @@ const fontFaces = `
     font-family: 'TT Hoves Pro';
     font-weight: 500;
     font-style: normal;
+    font-display: block;
     src: url('/fonts/TT_Hoves_Pro_Medium.otf') format('opentype');
   }
   @font-face {
     font-family: 'TT Hoves Pro';
     font-weight: 600;
     font-style: normal;
+    font-display: block;
     src: url('/fonts/TT_Hoves_Pro_DemiBold.otf') format('opentype');
   }
 `;
@@ -29,6 +31,10 @@ export const postSundayTemplate = `
     background: #fff;
     font-family: 'TT Hoves Pro', sans-serif;
     color: #000;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: geometricPrecision;
+    font-synthesis: none;
   }
 
   .screen__photo-wrap {
