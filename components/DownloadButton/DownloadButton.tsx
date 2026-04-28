@@ -397,7 +397,9 @@ async function renderWithHtmlToImage(
       height,
       pixelRatio: 1,
       skipAutoScale: true,
-      skipFonts: true,
+      // skipFonts left at the default (false). iOS Safari does NOT inherit
+      // @font-face from the parent document into an SVG <foreignObject>,
+      // so html-to-image must inline the font files as base64 itself.
       includeQueryParams: true,
       imagePlaceholder: TRANSPARENT_PIXEL,
     });
@@ -465,7 +467,13 @@ async function renderWithCanvasComposite(
       height,
       pixelRatio: 1,
       skipAutoScale: true,
-      skipFonts: true,
+      // skipFonts left at the default (false). iOS Safari does NOT inherit
+      // @font-face from the parent document into an SVG <foreignObject> —
+      // without inlined fonts iOS falls back to system sans-serif, which
+      // is wider than TT Hoves Pro and causes the legal text to wrap to
+      // 3 lines instead of 2. Letting html-to-image embed the font files
+      // as base64 adds ~500KB to the SVG but is the only way iOS will
+      // render TT Hoves Pro inside foreignObject.
       includeQueryParams: true,
       imagePlaceholder: TRANSPARENT_PIXEL,
       backgroundColor: undefined,
