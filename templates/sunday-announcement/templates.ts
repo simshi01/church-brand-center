@@ -160,7 +160,7 @@ export const postSundayTemplate = `
     bottom: 32px;
     left: 50%;
     transform: translateX(-50%);
-    width: 720px;
+    width: 1040px;
     font-family: 'TT Hoves Pro', sans-serif;
     font-weight: 500;
     font-size: 12px;

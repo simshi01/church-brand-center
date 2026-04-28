@@ -14,7 +14,6 @@ import EditorPreview, { EditorPreviewHandle } from '@/components/EditorPreview/E
 import SizeSelector from '@/components/SizeSelector/SizeSelector';
 import DownloadButton from '@/components/DownloadButton/DownloadButton';
 import BottomSheet, { getSnapHeight, SnapPoint } from '@/components/BottomSheet/BottomSheet';
-import DebugConsole from '@/components/DebugConsole/DebugConsole';
 import type { CutoutStatus } from '@/components/ImageUploader/ImageUploader';
 import styles from './Editor.module.css';
 
@@ -304,8 +303,6 @@ export default function Editor({ config }: EditorProps) {
           {sidebarEl}
         </BottomSheet>
       )}
-
-      <DebugConsole />
     </div>
   );
 }
