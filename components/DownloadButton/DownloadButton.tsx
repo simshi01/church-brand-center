@@ -316,6 +316,19 @@ async function renderWithHtml2Canvas(
       windowWidth: width,
       windowHeight: height,
       foreignObjectRendering: false,
+      onclone: (_doc: Document, clonedEl: HTMLElement) => {
+        // html2canvas builds an internal clone of the document right before
+        // its layout pass. Re-apply our bottom→top anchor conversion HERE so
+        // any inline styles that didn't survive the clone, or any cascade
+        // ambiguities (CSS rule beating plain inline), are forced again with
+        // !important. Then log what html2canvas actually sees.
+        try {
+          inlineBottomAnchors(clonedEl);
+          logOncloneSnapshot(clonedEl);
+        } catch (err) {
+          debugLog.error('onclone', `threw: ${String(err)}`);
+        }
+      },
     });
     debugLog.info('h2c', `done in ${Math.round(performance.now() - t0)}ms, canvas ${canvas.width}x${canvas.height}`);
     const blob = await new Promise<Blob | null>((resolve) => {
@@ -327,6 +340,43 @@ async function renderWithHtml2Canvas(
     debugLog.error('h2c', `threw: ${String(err)}`);
     return null;
   }
+}
+
+/**
+ * Diagnostic logging from inside html2canvas's `onclone` callback. Captures
+ * what html2canvas sees in its internal cloned document right before it
+ * starts rendering — letting us spot if our inline overrides survived the
+ * clone, if computed styles match expectations, and if rects line up.
+ */
+function logOncloneSnapshot(screen: HTMLElement): void {
+  const sr = screen.getBoundingClientRect();
+  debugLog.info(
+    'onclone',
+    `.screen rect ${Math.round(sr.width)}x${Math.round(sr.height)} @ (${Math.round(sr.left)},${Math.round(sr.top)})`
+  );
+  const targets: { sel: string; name: string }[] = [
+    { sel: '.screen__photo-wrap', name: 'photo-wrap' },
+    { sel: '.screen__info', name: 'info' },
+    { sel: '.screen__legal', name: 'legal' },
+  ];
+  for (const t of targets) {
+    const el = screen.querySelector(t.sel) as HTMLElement | null;
+    if (!el) {
+      debugLog.warn('onclone', `${t.name}: not found`);
+      continue;
+    }
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    debugLog.info(
+      'onclone',
+      `${t.name} inline.top=${el.style.top || '-'} inline.bottom=${el.style.bottom || '-'} inline.h=${el.style.height || '-'} cs.top=${cs.top} cs.bottom=${cs.bottom} cs.h=${cs.height} rect.top=${Math.round(r.top - sr.top)} rect.h=${Math.round(r.height)}`
+    );
+  }
+  const rows = Array.from(screen.querySelectorAll('.screen__info-row')) as HTMLElement[];
+  rows.forEach((row, i) => {
+    const r = row.getBoundingClientRect();
+    debugLog.info('onclone', `info-row[${i}] rect.top=${Math.round(r.top - sr.top)} h=${Math.round(r.height)}`);
+  });
 }
 
 async function renderWithHtmlToImage(
@@ -386,17 +436,23 @@ function inlineBottomAnchors(screen: HTMLElement): void {
 
     const r = el.getBoundingClientRect();
     if (usesBottom) {
-      el.style.top = `${r.top - screenRect.top}px`;
-      el.style.bottom = 'auto';
+      // !important to defeat any cascade rule (e.g. `bottom: 120px` in the
+      // template <style> tag) — html2canvas's layout pass otherwise picks up
+      // the stylesheet rule and ignores plain inline `top`.
+      el.style.setProperty('top', `${r.top - screenRect.top}px`, 'important');
+      el.style.setProperty('bottom', 'auto', 'important');
+      // Pin the layout box height too — html2canvas can mis-measure flex-gap
+      // / box-sizing / padding combos on absolute containers and grow them.
+      el.style.setProperty('height', `${r.height}px`, 'important');
     }
     if (usesRightOnly) {
-      el.style.left = `${r.left - screenRect.left}px`;
-      el.style.right = 'auto';
+      el.style.setProperty('left', `${r.left - screenRect.left}px`, 'important');
+      el.style.setProperty('right', 'auto', 'important');
     }
     count++;
     debugLog.info(
       'anchor',
-      `${el.className || el.tagName}: top=${Math.round(r.top - screenRect.top)} left=${Math.round(r.left - screenRect.left)}`
+      `${el.className || el.tagName}: top=${Math.round(r.top - screenRect.top)} left=${Math.round(r.left - screenRect.left)} h=${Math.round(r.height)}`
     );
   }
   debugLog.info('anchor', `inlined ${count} bottom/right-anchored element(s)`);
@@ -591,16 +647,19 @@ async function compositeContainer(container: HTMLElement, idx: number): Promise<
     return false;
   }
 
-  // Replace container content with a single <img> using 100% sizing. We
-  // deliberately DON'T pin the container to explicit px — its CSS rules
-  // (position:absolute;inset:0 = 1200×1500) already size it correctly, and
-  // inline px can disturb adjacent absolutely-positioned info rows.
+  // Replace container content with a single <img> + pin the container size in
+  // px. We measured w/h above from clientWidth/offsetWidth; pinning makes sure
+  // a downstream `inlineBottomAnchors` pass that converts `inset:0` →
+  // `bottom:auto` doesn't accidentally collapse the wrap to auto-height (which
+  // then makes html2canvas mis-measure surrounding bottom-anchored siblings).
   while (container.firstChild) container.removeChild(container.firstChild);
   const flat = document.createElement('img');
   flat.src = composite;
   flat.alt = '';
-  flat.style.cssText = 'display:block;width:100%;height:100%;object-fit:fill;';
+  flat.style.cssText = `display:block;width:${w}px;height:${h}px;object-fit:fill;`;
   container.appendChild(flat);
+  container.style.setProperty('width', `${w}px`, 'important');
+  container.style.setProperty('height', `${h}px`, 'important');
   // Clip-path is baked into the pixels; drop it from the container so the
   // renderer doesn't try to re-apply it (html2canvas doesn't support polygon
   // clip-paths on HTML elements anyway).
