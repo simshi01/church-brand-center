@@ -443,6 +443,17 @@ async function renderWithCanvasComposite(
 ): Promise<Blob | null> {
   const t0 = performance.now();
 
+  // Bake every <img>'s object-fit + CSS filter into a flat data URI before
+  // anything else. Required for templates that use object-fit: cover on a
+  // bg <img> (SVG foreignObject does not honour object-fit reliably and
+  // squashes the picture) and for filter:blur baked onto an <img>
+  // (podcast-square's blurred background, screen-youtube's duplicated
+  // card-bg with blur). Safe for templates that already pre-baked the
+  // photo via compositeClippedContainers (re-bake produces the same
+  // flat pixels).
+  await prepareImagesForCapture(cloneScreen);
+  await doubleRaf();
+
   // Grab the composited photo (already baked by compositeClippedContainers
   // earlier in captureScreenToPng — it's a flat <img> with the polygon mask
   // and grayscale already in the pixels).

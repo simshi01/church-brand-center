@@ -50,9 +50,6 @@ export const screenYoutubeTemplate = `
     left: 39.5px;
     width: 800px;
     height: 1000px;
-    background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(50px);
-    -webkit-backdrop-filter: blur(50px);
     border-radius: 60px;
     padding: 60px;
     display: flex;
@@ -62,7 +59,27 @@ export const screenYoutubeTemplate = `
     z-index: 2;
   }
 
+  .screen__card-bg {
+    position: absolute;
+    top: -39.5px;
+    left: -39.5px;
+    width: 1920px;
+    height: 1080px;
+    object-fit: cover;
+    filter: blur(50px) saturate(1.05);
+    z-index: 0;
+  }
+
+  .screen__card-tint {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.08);
+    z-index: 1;
+  }
+
   .screen__title {
+    position: relative;
+    z-index: 2;
     font-family: 'TT Hoves Pro', sans-serif;
     font-weight: 600;
     font-size: {{titleSize}}px;
@@ -73,6 +90,8 @@ export const screenYoutubeTemplate = `
   }
 
   .screen__subtitle {
+    position: relative;
+    z-index: 2;
     font-family: 'TT Hoves Pro', sans-serif;
     font-weight: 500;
     font-size: 60px;
@@ -126,6 +145,8 @@ export const screenYoutubeTemplate = `
   </div>
 
   <div class="screen__card">
+    <img class="screen__card-bg" src="{{bgImage}}" alt="">
+    <div class="screen__card-tint"></div>
     <p class="screen__title">{{title}}</p>
     <p class="screen__subtitle">{{subtitle}}</p>
   </div>
